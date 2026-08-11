@@ -1,0 +1,121 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2rem 1rem;
+  font-family: "Georgia", "Apple SD Gothic Neo", serif;
+  background: radial-gradient(circle at top, #1b1030 0%, #0a0614 70%);
+  color: #e8dcff;
+}
+
+h1 {
+  letter-spacing: 0.1em;
+  color: #c9a4ff;
+  text-shadow: 0 0 12px rgba(201, 164, 255, 0.6);
+}
+
+.card {
+  width: 260px;
+  min-height: 260px;
+  border: 1px solid #6d4fa3;
+  border-radius: 16px;
+  background: linear-gradient(160deg, #2a1a4a, #150a28);
+  box-shadow: 0 0 30px rgba(140, 90, 220, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 1.5rem;
+  opacity: 0;
+  transform: scale(0.9);
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.card.flip {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.card .symbol {
+  font-size: 3.5rem;
+}
+
+.card .name {
+  font-size: 1.4rem;
+  margin: 0.5rem 0;
+  color: #f0d9ff;
+}
+
+.card .meaning {
+  font-size: 0.9rem;
+  color: #c8b8e0;
+  line-height: 1.4;
+}
+
+.buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin: 1.5rem 0;
+}
+
+button {
+  font-size: 1rem;
+  padding: 0.6rem 1.4rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #7c4dff;
+  color: white;
+}
+
+button:active {
+  background: #5e35d6;
+}
+
+#clear-btn {
+  background: transparent;
+  border: 1px solid #6d4fa3;
+  color: #c9a4ff;
+}
+
+.history {
+  width: 100%;
+  max-width: 320px;
+}
+
+.history h2 {
+  font-size: 1rem;
+  color: #9a7fd0;
+  border-bottom: 1px solid #4a3570;
+  padding-bottom: 0.3rem;
+}
+
+#history-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+#history-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px dashed #33254d;
+  font-size: 0.85rem;
+}
+
+#history-list time {
+  color: #7a6a9a;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}

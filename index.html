@@ -3,47 +3,29 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Score App</title>
-<style>
-  body {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    height: 100vh;
-    margin: 0;
-    font-family: sans-serif;
-    background: #f5f5f5;
-  }
-  #score {
-    font-size: 3rem;
-    margin-bottom: 1.5rem;
-  }
-  button {
-    font-size: 1.5rem;
-    padding: 0.75rem 2rem;
-    border: none;
-    border-radius: 8px;
-    background: #4a90d9;
-    color: white;
-    cursor: pointer;
-  }
-  button:active {
-    background: #3a72ad;
-  }
-</style>
+<title>OccultCard</title>
+<link rel="stylesheet" href="style.css" />
 </head>
 <body>
-  <div id="score">Score: 0</div>
-  <button id="hello-btn">Hello</button>
+  <h1>OCCULT CARD</h1>
 
-  <script>
-    let score = 0;
-    const scoreEl = document.getElementById('score');
-    document.getElementById('hello-btn').addEventListener('click', () => {
-      score += 1;
-      scoreEl.textContent = `Score: ${score}`;
-    });
-  </script>
+  <div class="card" id="card-display">
+    <div class="symbol">🔮</div>
+    <div class="name">카드를 뽑아보세요</div>
+  </div>
+
+  <div class="buttons">
+    <button id="draw-btn">카드 뽑기</button>
+    <button id="clear-btn">기록 지우기</button>
+  </div>
+
+  <div class="history">
+    <h2>뽑기 기록</h2>
+    <ul id="history-list"></ul>
+  </div>
+
+  <script src="cards.js"></script>
+  <script src="storage.js"></script>
+  <script src="app.js"></script>
 </body>
 </html>
