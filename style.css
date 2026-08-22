@@ -119,3 +119,22 @@ button:active {
   font-size: 0.75rem;
   white-space: nowrap;
 }
+
+.game-link {
+  margin: 0 0 1.5rem;
+  font-size: 0.9rem;
+}
+
+.game-link a {
+  display: inline-block;
+  padding: 0.55rem 1.1rem;
+  border: 1px solid #6d4fa3;
+  border-radius: 8px;
+  color: #c9a4ff;
+  text-decoration: none;
+  background: rgba(124, 77, 255, 0.12);
+}
+
+.game-link a:hover {
+  background: rgba(124, 77, 255, 0.28);
+}

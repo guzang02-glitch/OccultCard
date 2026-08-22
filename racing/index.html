@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>BRAKE FAILURE - 브레이크 고장 레이싱</title>
+<meta name="description" content="브레이크가 고장난 채 9차선 고속도로를 질주하는 자동 가속 레이싱 게임" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<div id="stage">
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-left">
+      <div class="speedbox">
+        <span id="hud-speed">100</span><small>km/h</small>
+      </div>
+      <div class="gauge"><div id="gauge-fill"></div></div>
+      <div class="hud-line">거리 <b id="hud-distance">0</b> m</div>
+      <div class="hud-line dim">최고 <b id="hud-best">0</b> m</div>
+      <div class="hud-line dim"><b id="hud-lane">5</b>차선 · 흐름 <b id="hud-lane-speed">130</b>km/h</div>
+    </div>
+
+    <div class="hud-right">
+      <div id="scene-name">여명의 도시</div>
+      <canvas id="radar" width="120" height="220"></canvas>
+      <div class="radar-legend"><span class="me"></span>나 <span class="ahead"></span>앞 <span class="behind"></span>뒤</div>
+    </div>
+
+    <div id="combo" class="center-msg"><span id="hud-combo"></span></div>
+    <div id="warn" class="center-msg warn">⚠ 뒤에서 접근 중</div>
+    <div id="brake-msg" class="center-msg brake">브레이크 고장! 멈출 수 없다</div>
+  </div>
+
+  <!-- 모바일 조작 -->
+  <div id="touch-controls">
+    <button id="btn-left" aria-label="왼쪽 차선">◀</button>
+    <button id="btn-right" aria-label="오른쪽 차선">▶</button>
+    <button id="btn-sound" aria-label="소리">🔊</button>
+  </div>
+
+  <!-- 메뉴 -->
+  <div id="menu" class="overlay show">
+    <div class="panel">
+      <h1>BRAKE<span>FAILURE</span></h1>
+      <p class="lead">
+        브레이크가 고장났다. 속도는 <b>초당 1km/h씩</b> 영원히 올라간다.<br />
+        9차선 고속도로에서 차를 피해 <b>최대한 멀리</b> 가라.
+      </p>
+
+      <div class="cols">
+        <section>
+          <h2>차량 선택</h2>
+          <div id="car-list"></div>
+        </section>
+        <aside>
+          <h2>차선별 흐름 속도</h2>
+          <div id="lane-table"></div>
+          <p class="note">왼쪽 차선일수록 빠르다. 내 속도가 낮을 땐 왼쪽에서 <b>뒤차가 덮친다.</b> 속도가 붙으면 반대로 오른쪽 저속 차량이 벽이 된다.</p>
+          <h2>조작</h2>
+          <ul class="keys">
+            <li><kbd>←</kbd> <kbd>→</kbd> 차선 변경 (A / D)</li>
+            <li><kbd>Space</kbd> 브레이크 (…고장)</li>
+            <li><kbd>Enter</kbd> 시작 / 재시작</li>
+            <li><kbd>Esc</kbd> 메뉴로</li>
+            <li>모바일: 화면 좌/우 터치</li>
+          </ul>
+          <div class="best">최고 기록 <b id="menu-best">0 m / 0 점</b></div>
+        </aside>
+      </div>
+
+      <button id="btn-start" class="primary">엔진 시동 걸기</button>
+    </div>
+  </div>
+
+  <!-- 게임오버 -->
+  <div id="gameover" class="overlay">
+    <div class="panel small">
+      <h1 class="crash">CRASH</h1>
+      <dl class="result">
+        <div><dt>주행 거리</dt><dd id="over-distance">0 m</dd></div>
+        <div><dt>점수</dt><dd id="over-score">0</dd></div>
+        <div><dt>최고 속도</dt><dd id="over-top">0 km/h</dd></div>
+        <div><dt>아슬아슬 통과</dt><dd id="over-near">0 회</dd></div>
+        <div><dt>생존 시간</dt><dd id="over-time">0 초</dd></div>
+      </dl>
+      <div class="best">최고 기록 <b id="over-best">0 m</b></div>
+      <div class="btn-row">
+        <button id="btn-retry" class="primary">다시 달리기</button>
+        <button id="btn-menu">차량 변경</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="cars.js"></script>
+<script src="scenery.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
