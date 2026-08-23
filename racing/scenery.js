@@ -211,14 +211,14 @@ const OBJ_GENS = {
 
 // --- 바이옴 정의 ------------------------------------------------------
 //  ground1/2 : 지면 교차 밴드 색 (스크롤 감각의 핵심)
-//  road1/2   : 노면 교차 밴드 색   shoulder : 갓길
+//  road      : 노면 단색           shoulder : 갓길
 //  rumble1/2 : 도로 경계 스트립     lane : 차선 도색
 //  overlay   : 화면 전체 색보정
 const BIOMES = [
   {
     id: "dawn", name: "여명의 도시",
-    ground1: "#4b4260", ground2: "#443a57", detail: "#564a6d",
-    road1: "#54545e", road2: "#4c4c56", shoulder: "#63636e",
+    ground1: "#4b4260", ground2: "#443a57",
+    road1: "#54545e", shoulder: "#63636e",
     rumble1: "#ff5470", rumble2: "#f4f4f4", lane: "#ffffff",
     overlay: "rgba(255,138,90,0.10)",
     objects: ["building", "lamp", "tree"],
@@ -226,8 +226,8 @@ const BIOMES = [
   },
   {
     id: "desert", name: "사막 고속도로",
-    ground1: "#d9a86c", ground2: "#cfa065", detail: "#e2b783",
-    road1: "#6e6559", road2: "#665d52", shoulder: "#8a7c68",
+    ground1: "#d9a86c", ground2: "#cfa065",
+    road1: "#6e6559", shoulder: "#8a7c68",
     rumble1: "#e0603c", rumble2: "#f7e6c4", lane: "#fff6df",
     overlay: "rgba(255,208,130,0.10)",
     objects: ["cactus", "rock", "sign"],
@@ -235,8 +235,8 @@ const BIOMES = [
   },
   {
     id: "neon", name: "네온 나이트",
-    ground1: "#171827", ground2: "#131422", detail: "#22243a",
-    road1: "#2c2c3c", road2: "#262635", shoulder: "#3a3a4e",
+    ground1: "#171827", ground2: "#131422",
+    road1: "#2c2c3c", shoulder: "#3a3a4e",
     rumble1: "#ff2e88", rumble2: "#00e5ff", lane: "#8ef6ff",
     overlay: "rgba(20,10,60,0.34)",
     objects: ["building", "lamp", "sign"],
@@ -244,8 +244,8 @@ const BIOMES = [
   },
   {
     id: "snow", name: "설원 구간",
-    ground1: "#eaf2fb", ground2: "#dde8f5", detail: "#ffffff",
-    road1: "#586470", road2: "#505c67", shoulder: "#6e7a86",
+    ground1: "#eaf2fb", ground2: "#dde8f5",
+    road1: "#586470", shoulder: "#6e7a86",
     rumble1: "#cf4b5a", rumble2: "#ffffff", lane: "#ffffff",
     overlay: "rgba(180,215,255,0.14)",
     objects: ["snowpine", "rock", "bush"],
@@ -253,8 +253,8 @@ const BIOMES = [
   },
   {
     id: "coast", name: "해안 도로",
-    ground1: "#ddd3a2", ground2: "#d2c896", detail: "#e9e0b4",
-    road1: "#525d66", road2: "#4a555e", shoulder: "#6d7882",
+    ground1: "#ddd3a2", ground2: "#d2c896",
+    road1: "#525d66", shoulder: "#6d7882",
     rumble1: "#ffffff", rumble2: "#2f7fbf", lane: "#ffffff",
     overlay: "rgba(120,215,255,0.10)",
     objects: ["palm", "rock", "bush"],
@@ -262,8 +262,8 @@ const BIOMES = [
   },
   {
     id: "forest", name: "황혼의 숲",
-    ground1: "#33452f", ground2: "#2c3c29", detail: "#3d5237",
-    road1: "#4b4b4b", road2: "#434343", shoulder: "#5c5a54",
+    ground1: "#33452f", ground2: "#2c3c29",
+    road1: "#4b4b4b", shoulder: "#5c5a54",
     rumble1: "#ffb400", rumble2: "#3a2a2a", lane: "#ffe9c2",
     overlay: "rgba(255,120,60,0.14)",
     objects: ["pine", "tree", "bush"],
@@ -271,8 +271,8 @@ const BIOMES = [
   },
   {
     id: "volcano", name: "화산 지대",
-    ground1: "#3a2320", ground2: "#33201d", detail: "#4a2b25",
-    road1: "#3f3638", road2: "#382f31", shoulder: "#4d4245",
+    ground1: "#3a2320", ground2: "#33201d",
+    road1: "#3f3638", shoulder: "#4d4245",
     rumble1: "#ff3b1f", rumble2: "#ffd08a", lane: "#ffcf9a",
     overlay: "rgba(255,80,20,0.16)",
     objects: ["rock", "sign", "lamp"],

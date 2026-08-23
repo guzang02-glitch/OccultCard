@@ -36,11 +36,8 @@ const CFG = {
   aheadWin: 3.2,          // × 화면높이 : 트래픽 관리 범위(앞)
   behindWin: 1.2,         // × 화면높이 : 트래픽 관리 범위(뒤)
 
-  // 눈이 피로하지 않게 노면 무늬를 아주 길게 잡는다 (깜빡임 최소화)
-  bandLen: 320,           // 지면 교차 밴드 길이
-  roadBandLen: 640,       // 노면 교차 밴드 길이
-  dashPeriod: 540,        // 차선 점선 주기
-  dashLen: 320,
+  // 눈이 피로하지 않게: 차선은 실선, 노면은 단색, 지면 밴드만 아주 길게
+  bandLen: 700,           // 지면 교차 밴드 길이
 
 };
 
@@ -331,9 +328,7 @@ function crash() {
 const ROW = 14;
 
 function renderGroundAndRoad(pal, zoom) {
-  const stretch = 1 + speedPct() * 0.9;   // 고속에서 밴드를 길게 늘여 깜빡임을 줄인다
-  const bandLen = CFG.bandLen * stretch;
-  const roadBandLen = CFG.roadBandLen * stretch;
+  const bandLen = CFG.bandLen * (1 + speedPct() * 0.9);   // 고속에선 더 길게
   const half = roadPxBase * zoom / 2;
   const left = W / 2 - half, right = W / 2 + half;
   const shoulder = half * 0.055;
@@ -356,45 +351,30 @@ function renderGroundAndRoad(pal, zoom) {
   ctx.fillRect(left - shoulder, 0, shoulder, H);
   ctx.fillRect(right, 0, shoulder, H);
 
-  // 노면
+  // 노면 (단색)
   ctx.fillStyle = pal.road1;
   ctx.fillRect(left, 0, half * 2, H);
-  ctx.fillStyle = pal.road2;
-  const rbPx = roadBandLen * zoom;
-  const roadP2 = roadBandLen * 2;
-  for (let s = Math.floor(sBot / roadP2) * roadP2; yOf(s, zoom) > -rbPx; s += roadP2) {
-    ctx.fillRect(left, yOf(s, zoom) - rbPx, half * 2, rbPx);
-  }
 }
 
 function renderRoadLines(pal, zoom) {
   const half = roadPxBase * zoom / 2;
   const left = W / 2 - half, right = W / 2 + half;
-  const sBot = State.scroll + (playerY - (H + 40)) / zoom;
-  const sTop = State.scroll + (playerY + 40) / zoom;
   const lineW = Math.max(1.6, roadPxBase * zoom * 0.0055);
-  const P = CFG.dashPeriod, D = CFG.dashLen;
 
-  // 차선 점선
+  // 차선: 끊김 없는 실선 (깜빡임 없음)
   ctx.fillStyle = pal.lane;
-  for (let s = Math.floor(sBot / P) * P; s < sTop; s += P) {
-    const y = yOf(s + D, zoom);
-    const h = D * zoom;
-    for (let i = 1; i < LANES; i++) {
-      ctx.fillRect(left + (i / LANES) * half * 2 - lineW / 2, y, lineW, h);
-    }
+  for (let i = 1; i < LANES; i++) {
+    ctx.fillRect(left + (i / LANES) * half * 2 - lineW / 2, 0, lineW, H);
   }
 
-  // 양쪽 경계 스트립 (럼블)
-  const RP = P * 0.9;
-  const w = lineW * 1.6;
-  for (let s = Math.floor(sBot / RP) * RP; s < sTop; s += RP) {
-    ctx.fillStyle = (Math.floor(s / RP) % 2 === 0) ? pal.rumble1 : pal.rumble2;
-    const y = yOf(s + RP, zoom);
-    const h = RP * zoom + 1;
-    ctx.fillRect(left - w, y, w * 2, h);
-    ctx.fillRect(right - w, y, w * 2, h);
-  }
+  // 도로 경계: 안쪽 흰 실선 + 갓길 색 스트립
+  const w = lineW * 1.7;
+  ctx.fillStyle = pal.rumble2;
+  ctx.fillRect(left, 0, w, H);
+  ctx.fillRect(right - w, 0, w, H);
+  ctx.fillStyle = pal.rumble1;
+  ctx.fillRect(left - w * 2.1, 0, w * 1.4, H);
+  ctx.fillRect(right + w * 0.7, 0, w * 1.4, H);
 }
 
 // 고속에서 노면 위로 흐르는 속도선
