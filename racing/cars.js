@@ -65,13 +65,15 @@ const CAR_TYPES = [
 ];
 
 // 도로 위 일반 차량 - 크기별로 실루엣이 모두 다르다 (색은 무작위)
+//  laneBias : -1(좌측 고속 차선 선호) ~ +1(우측 저속 차선 선호).
+//             생략하면 차폭에서 자동 계산한다 (큰 차 = 우측)
 const TRAFFIC_TYPES = [
   { id: "kei",     kind: "kei",     width: 236, topAspect: 1.75 },
   { id: "hatch",   kind: "hatch",   width: 262, topAspect: 2.00 },
   { id: "sedan",   kind: "sedan",   width: 288, topAspect: 2.30 },
   { id: "taxi",    kind: "taxi",    width: 288, topAspect: 2.30, color: "#f2c024" },
-  { id: "coupe",   kind: "coupe",   width: 292, topAspect: 2.42 },
-  { id: "muscle",  kind: "muscle",  width: 322, topAspect: 2.30 },
+  { id: "coupe",   kind: "coupe",   width: 292, topAspect: 2.42, laneBias: -0.5 },
+  { id: "muscle",  kind: "muscle",  width: 322, topAspect: 2.30, laneBias: -0.4 },
   { id: "wagon",   kind: "wagon",   width: 300, topAspect: 2.55 },
   { id: "suv",     kind: "suv",     width: 332, topAspect: 2.30 },
   { id: "van",     kind: "van",     width: 352, topAspect: 2.40 },
@@ -80,7 +82,7 @@ const TRAFFIC_TYPES = [
   { id: "boxtruck", kind: "box",    width: 402, topAspect: 3.40 },
   { id: "bus",     kind: "bus",     width: 380, topAspect: 3.90 },
   { id: "semi",    kind: "semi",    width: 404, topAspect: 5.20 },
-  { id: "scooter", kind: "scooter", width: 152, topAspect: 2.30 },
+  { id: "scooter", kind: "scooter", width: 152, topAspect: 2.30, laneBias: 0.85 },
 ];
 
 // 플레이어(빨강)와 헷갈리지 않도록 붉은 계열은 제외한다

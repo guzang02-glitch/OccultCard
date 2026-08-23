@@ -32,6 +32,7 @@ const CFG = {
   trafficMin: 45,
   trafficMax: 83,
   spawnMargin: 140,       // 화면 밖 이만큼(px) 더 나간 곳에서 생성한다
+  laneBiasStrength: 1.45, // 차폭에 따른 차선 편향 세기 (0이면 차종을 완전 무작위로)
 
   aheadWin: 3.2,          // × 화면높이 : 트래픽 관리 범위(앞)
   behindWin: 1.2,         // × 화면높이 : 트래픽 관리 범위(뒤)
@@ -158,10 +159,28 @@ function emptiestLane(ignore) {
   return best[Util.randInt(0, best.length - 1)];
 }
 
+// 차선 성향: 차폭이 클수록 +1(우측 저속 차선), 작을수록 -1(좌측 고속 차선)
+function laneBiasOf(type) {
+  if (type.laneBias !== undefined) return type.laneBias;
+  return Util.limit((type.width - 240) / 150, 0, 1) * 2 - 1;
+}
+
+// 차선에 맞춰 차종을 뽑는다. 트럭처럼 큰 차량은 우측 차선에서 훨씬 자주 나온다
+function pickType(lane) {
+  const laneT = (lane / (LANES - 1)) * 2 - 1;   // -1(1차선) ~ +1(9차선)
+  let total = 0;
+  const cum = TRAFFIC_TYPES.map((t) => {
+    total += Math.exp(CFG.laneBiasStrength * laneT * laneBiasOf(t));
+    return total;
+  });
+  const r = Math.random() * total;
+  return TRAFFIC_TYPES[cum.findIndex((c) => r <= c)] || TRAFFIC_TYPES[0];
+}
+
 function spawnCar(recycled, scatter) {
-  const type = TRAFFIC_TYPES[Util.randInt(0, TRAFFIC_TYPES.length - 1)];
-  const color = type.color || TRAFFIC_COLORS[Util.randInt(0, TRAFFIC_COLORS.length - 1)];
   const lane = emptiestLane(recycled);
+  const type = pickType(lane);
+  const color = type.color || TRAFFIC_COLORS[Util.randInt(0, TRAFFIC_COLORS.length - 1)];
   const speed = LANE_SPEEDS[lane] * Util.rand(0.95, 1.06);
   const ahead = speed < State.speed;   // 나보다 느리면 앞쪽에서 다가온다
   const len = carL(type);
