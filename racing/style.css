@@ -42,13 +42,6 @@ body:not(.playing) #hud { opacity: 0; }
 #combo { top: 20%; font-size: clamp(18px, 3vw, 28px); color: #ffd23f; text-shadow: 0 0 18px rgba(255,210,63,.7); }
 #hud-combo.show, #combo:has(#hud-combo.show) { opacity: 1; }
 #combo { opacity: 0; } #combo:has(.show) { opacity: 1; }
-.warn { top: 12%; color: #ff6b6b; font-size: clamp(15px, 2.4vw, 22px); text-shadow: 0 0 14px rgba(255,60,60,.8); }
-.warn.show { opacity: 1; animation: blink .5s steps(2, end) infinite; }
-@keyframes blink { 50% { opacity: .25; } }
-.brake { top: 32%; color: #fff; background: rgba(190,20,20,.85); padding: 10px 20px; border-radius: 8px;
-  font-size: clamp(15px, 2.6vw, 24px); letter-spacing: .02em; }
-.brake.show { opacity: 1; animation: shake .35s ease; }
-@keyframes shake { 25% { transform: translateX(calc(-50% - 6px)); } 75% { transform: translateX(calc(-50% + 6px)); } }
 
 /* ---------------- 터치 조작 ---------------- */
 #touch-controls { position: absolute; bottom: 16px; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 18px; }
@@ -95,7 +88,7 @@ h2 { font-size: 13px; letter-spacing: .16em; color: #7d90b0; margin: 0 0 10px; t
 .car-card:hover { background: rgba(120,170,255,.10); border-color: rgba(120,170,255,.4); }
 .car-card.selected { border-color: #4be3a0; background: rgba(75,227,160,.10); box-shadow: 0 0 0 1px #4be3a0 inset; }
 .car-thumb { display: flex; justify-content: center; }
-.car-thumb canvas { width: 90px; height: 90px; }
+.car-thumb canvas { width: 122px; height: 122px; }
 .car-name { font-weight: 800; font-size: 15px; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
 .car-name .tag { font-size: 10px; font-weight: 600; color: #0b1020; background: #7fb2ff; padding: 2px 6px; border-radius: 999px; }
 .car-desc { font-size: 11px; color: #8d9bb2; margin: 3px 0 8px; line-height: 1.35; min-height: 30px; }

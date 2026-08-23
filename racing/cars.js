@@ -85,179 +85,538 @@ const TRAFFIC_COLORS = [
 
 // ---------------------------------------------------------------------
 // 그리기: 모든 차량은 "위에서 본 모습" (앞쪽이 위)
+//  - 실차 비율을 참고했다. 앞이 좁고 뒷 휀더가 넓은 실루엣,
+//    보닛 크리스, 크롬 윈도우 트림, 길게 흐르는 글로스 하이라이트,
+//    가로로 얇게 두 줄 들어가는 헤드램프 / 리어 램프 바.
 // ---------------------------------------------------------------------
-function carShadow(ctx, W, H, inset) {
+
+// 차종별 비율 (W 대비 폭, H 대비 위치)
+//  nose/hip/tail : 앞·어깨·뒤 폭      ws : 앞유리 구간
+//  roofB / rwB   : 지붕 끝 / 뒷유리 끝  cab : 캐빈 폭 비율
+const CAR_SHAPE = {
+  car:    { nose: 0.66, hip: 0.84, tail: 0.78, wsA: 0.30, wsB: 0.46, roofB: 0.66, rwB: 0.80, cab: 0.58 },
+  sports: { nose: 0.60, hip: 0.86, tail: 0.74, wsA: 0.35, wsB: 0.51, roofB: 0.67, rwB: 0.80, cab: 0.60 },
+  van:    { nose: 0.80, hip: 0.86, tail: 0.84, wsA: 0.13, wsB: 0.27, roofB: 0.80, rwB: 0.92, cab: 0.72 },
+};
+
+function softShadow(ctx, W, H, drawShape) {
   ctx.save();
-  ctx.fillStyle = "rgba(0,0,0,0.34)";
-  ctx.filter = "blur(3px)";
-  roundRectPath(ctx, inset + W * 0.05, H * 0.03 + H * 0.02, W - inset * 2, H * 0.95, W * 0.16);
+  ctx.shadowColor = "rgba(0,0,0,0.45)";
+  ctx.shadowBlur = W * 0.10;
+  ctx.shadowOffsetX = W * 0.04;
+  ctx.shadowOffsetY = H * 0.012;
+  ctx.fillStyle = "rgba(0,0,0,0.55)";
+  drawShape(ctx);
+  ctx.restore();
+}
+
+// 차체 실루엣: 앞/뒤만 좁아지고 측면은 곧게 뻗는다 (실차 비율)
+function bodyPath(ctx, W, H, s) {
+  const cx = W / 2;
+  const hw = (f) => (W * f) / 2;
+  const yN = H * 0.02, yT = H * 0.985;
+  const shoulder = H * 0.15;    // 여기서부터 최대폭
+  const hipEnd = H * 0.82;      // 여기까지 최대폭 유지
+  ctx.beginPath();
+  ctx.moveTo(cx - hw(s.nose), yN + H * 0.012);
+  ctx.quadraticCurveTo(cx, yN - H * 0.005, cx + hw(s.nose), yN + H * 0.012);
+  ctx.quadraticCurveTo(cx + hw(s.hip), shoulder * 0.55, cx + hw(s.hip), shoulder);
+  ctx.lineTo(cx + hw(s.hip), hipEnd);
+  ctx.quadraticCurveTo(cx + hw(s.hip), yT - H * 0.02, cx + hw(s.tail), yT);
+  ctx.quadraticCurveTo(cx, yT + H * 0.01, cx - hw(s.tail), yT);
+  ctx.quadraticCurveTo(cx - hw(s.hip), yT - H * 0.02, cx - hw(s.hip), hipEnd);
+  ctx.lineTo(cx - hw(s.hip), shoulder);
+  ctx.quadraticCurveTo(cx - hw(s.hip), shoulder * 0.55, cx - hw(s.nose), yN + H * 0.012);
+  ctx.closePath();
+}
+
+// 유리: 아래가 넓은 사다리꼴
+function glassPath(ctx, W, H, topY, botY, topW, botW) {
+  const cx = W / 2;
+  ctx.beginPath();
+  ctx.moveTo(cx - (W * topW) / 2, H * topY);
+  ctx.lineTo(cx + (W * topW) / 2, H * topY);
+  ctx.quadraticCurveTo(cx + (W * botW) / 2, H * (topY + botY) / 2, cx + (W * botW) / 2, H * botY);
+  ctx.lineTo(cx - (W * botW) / 2, H * botY);
+  ctx.quadraticCurveTo(cx - (W * botW) / 2, H * (topY + botY) / 2, cx - (W * topW) / 2, H * topY);
+  ctx.closePath();
+}
+
+function tire(ctx, W, H, x, y, w, h) {
+  ctx.fillStyle = "#14151a";
+  roundRectPath(ctx, x, y, w, h, w * 0.28);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.16)";   // 림 반사
+  roundRectPath(ctx, x + w * 0.28, y + h * 0.3, w * 0.44, h * 0.4, w * 0.2);
+  ctx.fill();
+}
+
+function lampSlash(ctx, x, y, w, h, color, glow) {
+  ctx.save();
+  ctx.shadowColor = glow;
+  ctx.shadowBlur = h * 3.2;
+  ctx.fillStyle = color;
+  roundRectPath(ctx, x, y, w, h, h / 2);
+  ctx.fill();
   ctx.fill();
   ctx.restore();
 }
 
-function drawCarTop(ctx, W, H, kind, colors) {
+function drawSedan(ctx, W, H, kind, colors) {
+  const s = CAR_SHAPE[kind === "van" ? "van" : kind === "sports" ? "sports" : "car"];
   const body = colors.body;
   const glass = colors.glass || "#16283c";
-  const inset = W * 0.06;
-  const bw = W - inset * 2;
+  const cx = W / 2;
+  const hip = (W * s.hip) / 2;
 
-  carShadow(ctx, W, H, inset);
+  softShadow(ctx, W, H, (c) => bodyPath(c, W, H, s));
 
-  if (kind === "bike") {
-    ctx.fillStyle = "#15161a";
-    roundRectPath(ctx, W * 0.34, H * 0.04, W * 0.32, H * 0.92, W * 0.16);
-    ctx.fill();
-    ctx.fillStyle = body;
-    roundRectPath(ctx, W * 0.28, H * 0.26, W * 0.44, H * 0.42, W * 0.2);
-    ctx.fill();
-    ctx.fillStyle = shade(body, -0.5);
-    ctx.beginPath();
-    ctx.ellipse(W * 0.5, H * 0.44, W * 0.19, H * 0.12, 0, 0, Math.PI * 2);
-    ctx.fill(); // 라이더 어깨
-    ctx.fillStyle = "#20242c";
-    ctx.beginPath();
-    ctx.arc(W * 0.5, H * 0.3, W * 0.15, 0, Math.PI * 2);
-    ctx.fill(); // 헬멧
-    ctx.fillStyle = "rgba(255,255,255,0.3)";
-    ctx.beginPath();
-    ctx.arc(W * 0.5, H * 0.27, W * 0.08, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.fillStyle = "#fff8dc";
-    roundRectPath(ctx, W * 0.44, H * 0.03, W * 0.12, H * 0.03, W * 0.02);
-    ctx.fill();
-    ctx.fillStyle = "#ff2f2f";
-    roundRectPath(ctx, W * 0.42, H * 0.94, W * 0.16, H * 0.03, W * 0.02);
-    ctx.fill();
-    return;
-  }
+  // 바퀴 (차체 밖으로 살짝 나온다)
+  const tw = W * 0.085, th = H * 0.15;
+  tire(ctx, W, H, cx - hip - tw * 0.35, H * 0.15, tw, th);
+  tire(ctx, W, H, cx + hip - tw * 0.65, H * 0.15, tw, th);
+  tire(ctx, W, H, cx - hip - tw * 0.35, H * 0.70, tw, th * 1.05);
+  tire(ctx, W, H, cx + hip - tw * 0.65, H * 0.70, tw, th * 1.05);
 
-  // 차체
-  const g = ctx.createLinearGradient(inset, 0, inset + bw, 0);
-  g.addColorStop(0, shade(body, -0.34));
-  g.addColorStop(0.24, body);
-  g.addColorStop(0.5, shade(body, 0.22));
-  g.addColorStop(0.78, body);
-  g.addColorStop(1, shade(body, -0.34));
+  // 차체 (좌우 그라디언트로 광택)
+  const g = ctx.createLinearGradient(cx - hip, 0, cx + hip, 0);
+  g.addColorStop(0.00, shade(body, -0.45));
+  g.addColorStop(0.10, shade(body, -0.12));
+  g.addColorStop(0.24, shade(body, 0.26));
+  g.addColorStop(0.42, body);
+  g.addColorStop(0.62, shade(body, 0.14));
+  g.addColorStop(0.86, shade(body, -0.20));
+  g.addColorStop(1.00, shade(body, -0.48));
+  bodyPath(ctx, W, H, s);
   ctx.fillStyle = g;
-
-  const nose = kind === "truck" || kind === "bus" || kind === "van" ? 0.10 : 0.22;
-  roundRectPath(ctx, inset, H * 0.01, bw, H * 0.98, W * (kind === "sports" ? 0.20 : 0.16));
   ctx.fill();
-  ctx.strokeStyle = "rgba(0,0,0,0.35)";
-  ctx.lineWidth = Math.max(1, W * 0.012);
+  ctx.strokeStyle = "rgba(0,0,0,0.28)";
+  ctx.lineWidth = Math.max(1, W * 0.008);
   ctx.stroke();
 
-  if (kind === "truck" || kind === "bus") {
-    // 캡 / 화물칸 분리선
-    const cabEnd = kind === "bus" ? H * 0.22 : H * 0.26;
-    ctx.fillStyle = shade(body, -0.22);
-    roundRectPath(ctx, inset, cabEnd, bw, H * 0.98 - cabEnd, W * 0.06);
-    ctx.fill();
-    ctx.strokeStyle = "rgba(0,0,0,0.3)";
-    ctx.beginPath();
-    ctx.moveTo(inset, cabEnd);
-    ctx.lineTo(inset + bw, cabEnd);
-    ctx.stroke();
-    // 앞유리
-    ctx.fillStyle = glass;
-    roundRectPath(ctx, inset + bw * 0.10, H * 0.05, bw * 0.80, cabEnd - H * 0.10, W * 0.05);
-    ctx.fill();
-    if (kind === "bus") {
-      ctx.fillStyle = "rgba(255,255,255,0.14)";
-      for (let i = 0; i < 6; i++) {
-        const y = cabEnd + (H * 0.98 - cabEnd) * (0.08 + i * 0.15);
-        ctx.fillRect(inset + bw * 0.02, y, bw * 0.1, H * 0.07);
-        ctx.fillRect(inset + bw * 0.88, y, bw * 0.1, H * 0.07);
-      }
-    } else {
-      // 컨테이너 리브
-      ctx.strokeStyle = "rgba(0,0,0,0.18)";
-      for (let i = 1; i < 7; i++) {
-        const y = cabEnd + (H * 0.98 - cabEnd) * (i / 7);
-        ctx.beginPath();
-        ctx.moveTo(inset + bw * 0.06, y);
-        ctx.lineTo(inset + bw * 0.94, y);
-        ctx.stroke();
-      }
-    }
-    ctx.fillStyle = "#fff6d0";
-    roundRectPath(ctx, inset + bw * 0.04, H * 0.012, bw * 0.16, H * 0.022, 2);
-    ctx.fill();
-    roundRectPath(ctx, inset + bw * 0.80, H * 0.012, bw * 0.16, H * 0.022, 2);
-    ctx.fill();
-    ctx.fillStyle = "#ff3131";
-    roundRectPath(ctx, inset + bw * 0.04, H * 0.965, bw * 0.16, H * 0.022, 2);
-    ctx.fill();
-    roundRectPath(ctx, inset + bw * 0.80, H * 0.965, bw * 0.16, H * 0.022, 2);
-    ctx.fill();
-    return;
-  }
+  ctx.save();
+  bodyPath(ctx, W, H, s);
+  ctx.clip();
 
-  // 지붕 (승용차 / 밴)
-  const roofTop = H * (kind === "van" ? 0.20 : 0.30);
-  const roofBot = H * (kind === "van" ? 0.86 : 0.74);
-  ctx.fillStyle = shade(body, 0.1);
-  roundRectPath(ctx, inset + bw * 0.09, roofTop, bw * 0.82, roofBot - roofTop, W * 0.10);
+  // 길게 흐르는 하이라이트 2줄
+  [[0.30, 0.055, 0.30], [0.64, 0.03, 0.16]].forEach(([px, pw, a]) => {
+    const hg = ctx.createLinearGradient(0, 0, 0, H);
+    hg.addColorStop(0, `rgba(255,255,255,0)`);
+    hg.addColorStop(0.25, `rgba(255,255,255,${a})`);
+    hg.addColorStop(0.75, `rgba(255,255,255,${a * 0.7})`);
+    hg.addColorStop(1, `rgba(255,255,255,0)`);
+    ctx.fillStyle = hg;
+    ctx.fillRect(W * px, 0, W * pw, H);
+  });
+
+  // 보닛 크리스 / 도어 라인
+  ctx.strokeStyle = "rgba(0,0,0,0.22)";
+  ctx.lineWidth = Math.max(1, W * 0.006);
+  [-1, 1].forEach((d) => {
+    ctx.beginPath();
+    ctx.moveTo(cx + d * W * 0.13, H * 0.06);
+    ctx.lineTo(cx + d * W * 0.17, H * (s.wsA - 0.01));
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + d * hip, H * s.wsB);
+    ctx.lineTo(cx + d * hip * 0.72, H * s.wsB);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(cx + d * hip, H * s.roofB);
+    ctx.lineTo(cx + d * hip * 0.72, H * s.roofB);
+    ctx.stroke();
+  });
+  ctx.restore();
+
+  // 루프 패널 (차체보다 좁게 -> 위에서 보면 양옆으로 차체가 보인다)
+  const cab = s.cab;
+  ctx.fillStyle = shade(body, 0.08);
+  roundRectPath(ctx, cx - (W * cab) / 2, H * (s.wsB - 0.012), W * cab, H * (s.roofB - s.wsB + 0.024), W * 0.06);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.16)";
+  roundRectPath(ctx, cx - W * cab * 0.40, H * (s.wsB + 0.004), W * cab * 0.24, H * (s.roofB - s.wsB - 0.008), W * 0.03);
   ctx.fill();
 
   // 앞유리 / 뒷유리
-  ctx.fillStyle = glass;
-  ctx.beginPath();
-  ctx.moveTo(inset + bw * 0.16, roofTop);
-  ctx.lineTo(inset + bw * 0.84, roofTop);
-  ctx.lineTo(inset + bw * 0.90, H * nose);
-  ctx.lineTo(inset + bw * 0.10, H * nose);
-  ctx.closePath();
+  const gl = ctx.createLinearGradient(cx - W * cab * 0.5, 0, cx + W * cab * 0.5, 0);
+  gl.addColorStop(0, shade(glass, 0.34));
+  gl.addColorStop(0.35, shade(glass, 0.06));
+  gl.addColorStop(1, shade(glass, -0.25));
+  ctx.fillStyle = gl;
+  glassPath(ctx, W, H, s.wsA, s.wsB, cab * 0.98, cab * 0.74);
   ctx.fill();
-  ctx.beginPath();
-  ctx.moveTo(inset + bw * 0.16, roofBot);
-  ctx.lineTo(inset + bw * 0.84, roofBot);
-  ctx.lineTo(inset + bw * 0.90, H * (1 - nose * 0.62));
-  ctx.lineTo(inset + bw * 0.10, H * (1 - nose * 0.62));
-  ctx.closePath();
+  glassPath(ctx, W, H, s.roofB, s.rwB, cab * 0.98, cab * 0.72);
   ctx.fill();
-  // 유리 하이라이트
-  ctx.fillStyle = "rgba(255,255,255,0.16)";
-  ctx.beginPath();
-  ctx.moveTo(inset + bw * 0.16, roofTop);
-  ctx.lineTo(inset + bw * 0.42, roofTop);
-  ctx.lineTo(inset + bw * 0.34, H * nose);
-  ctx.lineTo(inset + bw * 0.10, H * nose);
-  ctx.closePath();
+  // 유리 반사 (한쪽만 비스듬히)
+  ctx.fillStyle = "rgba(255,255,255,0.22)";
+  glassPath(ctx, W, H, s.wsA + 0.012, s.wsB - 0.008, cab * 0.34, cab * 0.24);
   ctx.fill();
+
+  // 크롬 윈도우 트림
+  ctx.strokeStyle = "rgba(232,238,248,0.5)";
+  ctx.lineWidth = Math.max(1, W * 0.009);
+  glassPath(ctx, W, H, s.wsA, s.wsB, cab * 0.98, cab * 0.74);
+  ctx.stroke();
+  glassPath(ctx, W, H, s.roofB, s.rwB, cab * 0.98, cab * 0.72);
+  ctx.stroke();
 
   // 사이드미러
-  ctx.fillStyle = shade(body, -0.25);
-  roundRectPath(ctx, inset - W * 0.045, H * (nose + 0.02), W * 0.06, H * 0.035, 2);
-  ctx.fill();
-  roundRectPath(ctx, inset + bw - W * 0.015, H * (nose + 0.02), W * 0.06, H * 0.035, 2);
-  ctx.fill();
+  ctx.fillStyle = shade(body, -0.28);
+  [-1, 1].forEach((d) => {
+    roundRectPath(ctx, cx + d * (hip + W * 0.02) - (d > 0 ? 0 : W * 0.07), H * (s.wsA + 0.005), W * 0.07, H * 0.035, W * 0.02);
+    ctx.fill();
+  });
 
-  // 헤드라이트 / 테일램프
-  ctx.save();
-  ctx.shadowColor = "rgba(255,240,180,0.9)";
-  ctx.shadowBlur = W * 0.12;
-  ctx.fillStyle = "#fff6d0";
-  roundRectPath(ctx, inset + bw * 0.08, H * 0.015, bw * 0.20, H * 0.028, 3);
+  // 헤드램프: 얇은 두 줄 + 그릴
+  const lw = W * 0.15, lh = H * 0.013;
+  [-1, 1].forEach((d) => {
+    const x = d < 0 ? cx - W * 0.27 : cx + W * 0.12;
+    lampSlash(ctx, x, H * 0.042, lw, lh, "#fff8e2", "rgba(255,240,190,0.9)");
+    lampSlash(ctx, x + lw * 0.12, H * 0.066, lw * 0.76, lh, "#fff8e2", "rgba(255,240,190,0.7)");
+  });
+  ctx.fillStyle = "rgba(22,24,30,0.8)";
+  roundRectPath(ctx, cx - W * 0.075, H * 0.03, W * 0.15, H * 0.038, W * 0.025);
   ctx.fill();
-  roundRectPath(ctx, inset + bw * 0.72, H * 0.015, bw * 0.20, H * 0.028, 3);
-  ctx.fill();
-  ctx.restore();
+  ctx.strokeStyle = "rgba(220,225,235,0.5)";
+  ctx.lineWidth = Math.max(1, W * 0.006);
+  ctx.stroke();
+
+  // 리어 램프 바 + 머플러
   ctx.save();
   ctx.shadowColor = "rgba(255,50,50,0.95)";
-  ctx.shadowBlur = W * 0.16;
-  ctx.fillStyle = "#ff3131";
-  roundRectPath(ctx, inset + bw * 0.06, H * 0.955, bw * 0.22, H * 0.03, 3);
-  ctx.fill();
-  roundRectPath(ctx, inset + bw * 0.72, H * 0.955, bw * 0.22, H * 0.03, 3);
+  ctx.shadowBlur = W * 0.14;
+  ctx.fillStyle = "#ff2f2f";
+  roundRectPath(ctx, cx - W * s.tail * 0.46, H * 0.935, W * s.tail * 0.92, H * 0.022, H * 0.011);
   ctx.fill();
   ctx.restore();
+  ctx.fillStyle = "rgba(255,190,190,0.9)";
+  roundRectPath(ctx, cx - W * s.tail * 0.44, H * 0.939, W * s.tail * 0.2, H * 0.012, H * 0.006);
+  ctx.fill();
+  roundRectPath(ctx, cx + W * s.tail * 0.24, H * 0.939, W * s.tail * 0.2, H * 0.012, H * 0.006);
+  ctx.fill();
+  ctx.fillStyle = "#2a2d34";
+  [-1, 1].forEach((d) => {
+    roundRectPath(ctx, cx + d * W * 0.18 - (d > 0 ? 0 : W * 0.09), H * 0.968, W * 0.09, H * 0.016, W * 0.01);
+    ctx.fill();
+  });
 
-  if (kind === "sports") {
-    // 보닛 스트라이프
-    ctx.fillStyle = "rgba(255,255,255,0.22)";
-    ctx.fillRect(inset + bw * 0.44, H * 0.05, bw * 0.12, H * 0.9);
+  // 샤크핀 안테나
+  ctx.fillStyle = shade(body, -0.35);
+  roundRectPath(ctx, cx - W * 0.018, H * (s.roofB - 0.03), W * 0.036, H * 0.05, W * 0.012);
+  ctx.fill();
+}
+
+// 소형 카고 트럭: 짧은 캡 + 개방형 적재함 (실차 포터형 참고)
+function drawFlatbed(ctx, W, H, colors) {
+  const body = colors.body;
+  const glass = colors.glass || "#101820";
+  const cx = W / 2;
+  const cabEnd = H * 0.30;
+  const cabHalf = W * 0.44;
+  const bedHalf = W * 0.47;
+
+  softShadow(ctx, W, H, (c) => roundRectPath(c, cx - bedHalf, H * 0.01, bedHalf * 2, H * 0.98, W * 0.05));
+
+  // 바퀴 (뒤는 복륜)
+  const tw = W * 0.085;
+  tire(ctx, W, H, cx - cabHalf - tw * 0.4, H * 0.12, tw, H * 0.12);
+  tire(ctx, W, H, cx + cabHalf - tw * 0.6, H * 0.12, tw, H * 0.12);
+  tire(ctx, W, H, cx - bedHalf - tw * 0.3, H * 0.66, tw * 1.25, H * 0.14);
+  tire(ctx, W, H, cx + bedHalf - tw * 0.95, H * 0.66, tw * 1.25, H * 0.14);
+
+  // 적재함 바닥 (금속 데크)
+  ctx.fillStyle = "#7c828b";
+  roundRectPath(ctx, cx - bedHalf, cabEnd + H * 0.01, bedHalf * 2, H * 0.965 - cabEnd, W * 0.03);
+  ctx.fill();
+  const dg = ctx.createLinearGradient(cx - bedHalf, 0, cx + bedHalf, 0);
+  dg.addColorStop(0, "rgba(255,255,255,0.18)");
+  dg.addColorStop(0.35, "rgba(255,255,255,0.06)");
+  dg.addColorStop(1, "rgba(0,0,0,0.22)");
+  ctx.fillStyle = dg;
+  roundRectPath(ctx, cx - bedHalf, cabEnd + H * 0.01, bedHalf * 2, H * 0.965 - cabEnd, W * 0.03);
+  ctx.fill();
+  // 데크 리브
+  ctx.strokeStyle = "rgba(40,44,52,0.45)";
+  ctx.lineWidth = Math.max(1, W * 0.007);
+  for (let i = 1; i < 11; i++) {
+    const y = cabEnd + H * 0.01 + (H * 0.955 - cabEnd) * (i / 11);
+    ctx.beginPath();
+    ctx.moveTo(cx - bedHalf * 0.94, y);
+    ctx.lineTo(cx + bedHalf * 0.94, y);
+    ctx.stroke();
   }
+
+  // 적재함 측면 게이트 (차체색)
+  const rg = ctx.createLinearGradient(cx - bedHalf, 0, cx + bedHalf, 0);
+  rg.addColorStop(0, shade(body, -0.4));
+  rg.addColorStop(0.3, shade(body, 0.24));
+  rg.addColorStop(0.6, body);
+  rg.addColorStop(1, shade(body, -0.42));
+  ctx.fillStyle = rg;
+  const railW = W * 0.075;
+  roundRectPath(ctx, cx - bedHalf, cabEnd + H * 0.01, railW, H * 0.965 - cabEnd, W * 0.02);
+  ctx.fill();
+  roundRectPath(ctx, cx + bedHalf - railW, cabEnd + H * 0.01, railW, H * 0.965 - cabEnd, W * 0.02);
+  ctx.fill();
+  // 뒷 게이트
+  roundRectPath(ctx, cx - bedHalf, H * 0.905, bedHalf * 2, H * 0.06, W * 0.02);
+  ctx.fill();
+
+  // 캡
+  const cg = ctx.createLinearGradient(cx - cabHalf, 0, cx + cabHalf, 0);
+  cg.addColorStop(0, shade(body, -0.45));
+  cg.addColorStop(0.22, shade(body, 0.28));
+  cg.addColorStop(0.5, body);
+  cg.addColorStop(0.82, shade(body, -0.18));
+  cg.addColorStop(1, shade(body, -0.48));
+  ctx.fillStyle = cg;
+  roundRectPath(ctx, cx - cabHalf, H * 0.012, cabHalf * 2, cabEnd - H * 0.012, W * 0.06);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = Math.max(1, W * 0.008);
+  ctx.stroke();
+
+  // 앞유리 + 루프
+  ctx.fillStyle = glass;
+  glassPath(ctx, W, H, 0.155, 0.055, 0.66, 0.78);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.18)";
+  ctx.beginPath();
+  ctx.moveTo(cx - W * 0.33, H * 0.055);
+  ctx.lineTo(cx - W * 0.10, H * 0.055);
+  ctx.lineTo(cx - W * 0.19, H * 0.155);
+  ctx.lineTo(cx - W * 0.28, H * 0.155);
+  ctx.closePath();
+  ctx.fill();
+  ctx.fillStyle = shade(body, 0.12);
+  roundRectPath(ctx, cx - W * 0.30, H * 0.16, W * 0.60, H * 0.125, W * 0.04);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.12)";
+  roundRectPath(ctx, cx - W * 0.26, H * 0.175, W * 0.16, H * 0.10, W * 0.03);
+  ctx.fill();
+
+  // 넓게 튀어나온 사이드미러
+  ctx.fillStyle = "#e8ebef";
+  [-1, 1].forEach((d) => {
+    roundRectPath(ctx, cx + d * (cabHalf + W * 0.045) - (d > 0 ? 0 : W * 0.09), H * 0.115, W * 0.09, H * 0.042, W * 0.015);
+    ctx.fill();
+    ctx.fillStyle = "#2a2d34";
+    ctx.fillRect(cx + d * cabHalf - (d > 0 ? 0 : W * 0.05), H * 0.128, W * 0.05, H * 0.012);
+    ctx.fillStyle = "#e8ebef";
+  });
+
+  // 램프 / 반사 테이프
+  ctx.fillStyle = "#fff6d0";
+  roundRectPath(ctx, cx - cabHalf + W * 0.03, H * 0.018, W * 0.16, H * 0.02, 2);
+  ctx.fill();
+  roundRectPath(ctx, cx + cabHalf - W * 0.19, H * 0.018, W * 0.16, H * 0.02, 2);
+  ctx.fill();
+  ctx.save();
+  ctx.shadowColor = "rgba(255,50,50,0.9)";
+  ctx.shadowBlur = W * 0.1;
+  ctx.fillStyle = "#ff3131";
+  roundRectPath(ctx, cx - bedHalf + W * 0.03, H * 0.94, W * 0.15, H * 0.02, 2);
+  ctx.fill();
+  roundRectPath(ctx, cx + bedHalf - W * 0.18, H * 0.94, W * 0.15, H * 0.02, 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBus(ctx, W, H, colors) {
+  const body = colors.body;
+  const glass = colors.glass || "#101820";
+  const inset = W * 0.05;
+  const bw = W - inset * 2;
+
+  softShadow(ctx, W, H, (c) => roundRectPath(c, inset, H * 0.01, bw, H * 0.98, W * 0.09));
+
+  const tw = W * 0.075;
+  [[H * 0.09, 1], [H * 0.78, 1.1]].forEach(([y, sc]) => {
+    tire(ctx, W, H, inset - tw * 0.5, y, tw, H * 0.10 * sc);
+    tire(ctx, W, H, inset + bw - tw * 0.5, y, tw, H * 0.10 * sc);
+  });
+
+  const g = ctx.createLinearGradient(inset, 0, inset + bw, 0);
+  g.addColorStop(0, shade(body, -0.48));
+  g.addColorStop(0.2, shade(body, 0.22));
+  g.addColorStop(0.45, body);
+  g.addColorStop(0.78, shade(body, -0.2));
+  g.addColorStop(1, shade(body, -0.5));
+  ctx.fillStyle = g;
+  roundRectPath(ctx, inset, H * 0.01, bw, H * 0.98, W * 0.09);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = Math.max(1, W * 0.008);
+  ctx.stroke();
+
+  // 앞유리 + 측면 창 + 루프 해치
+  ctx.fillStyle = glass;
+  roundRectPath(ctx, inset + bw * 0.08, H * 0.035, bw * 0.84, H * 0.10, W * 0.04);
+  ctx.fill();
+  for (let i = 0; i < 7; i++) {
+    const y = H * (0.17 + i * 0.107);
+    roundRectPath(ctx, inset + bw * 0.005, y, bw * 0.10, H * 0.072, W * 0.012);
+    ctx.fill();
+    roundRectPath(ctx, inset + bw * 0.895, y, bw * 0.10, H * 0.072, W * 0.012);
+    ctx.fill();
+  }
+  ctx.fillStyle = "rgba(255,255,255,0.14)";
+  roundRectPath(ctx, inset + bw * 0.3, H * 0.20, bw * 0.4, H * 0.14, W * 0.03);
+  ctx.fill();
+  roundRectPath(ctx, inset + bw * 0.3, H * 0.62, bw * 0.4, H * 0.14, W * 0.03);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.20)";
+  ctx.fillRect(inset + bw * 0.24, H * 0.02, bw * 0.08, H * 0.96);
+
+  ctx.fillStyle = "#fff6d0";
+  roundRectPath(ctx, inset + bw * 0.05, H * 0.015, bw * 0.16, H * 0.014, 2);
+  ctx.fill();
+  roundRectPath(ctx, inset + bw * 0.79, H * 0.015, bw * 0.16, H * 0.014, 2);
+  ctx.fill();
+  ctx.save();
+  ctx.shadowColor = "rgba(255,50,50,0.9)";
+  ctx.shadowBlur = W * 0.1;
+  ctx.fillStyle = "#ff3131";
+  roundRectPath(ctx, inset + bw * 0.05, H * 0.968, bw * 0.16, H * 0.014, 2);
+  ctx.fill();
+  roundRectPath(ctx, inset + bw * 0.79, H * 0.968, bw * 0.16, H * 0.014, 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawBike(ctx, W, H, colors) {
+  const body = colors.body;
+  const cx = W / 2;
+
+  softShadow(ctx, W, H, (c) => roundRectPath(c, W * 0.3, H * 0.06, W * 0.4, H * 0.88, W * 0.18));
+
+  // 앞/뒤 타이어
+  tire(ctx, W, H, cx - W * 0.10, H * 0.05, W * 0.20, H * 0.20);
+  tire(ctx, W, H, cx - W * 0.12, H * 0.66, W * 0.24, H * 0.26);
+
+  // 앞 포크 (금색) + 브레이크 디스크
+  ctx.fillStyle = "#d8a93a";
+  [-1, 1].forEach((d) => {
+    roundRectPath(ctx, cx + d * W * 0.12 - (d > 0 ? 0 : W * 0.05), H * 0.20, W * 0.05, H * 0.10, W * 0.02);
+    ctx.fill();
+  });
+  ctx.fillStyle = "rgba(210,215,225,0.75)";
+  [-1, 1].forEach((d) => {
+    ctx.beginPath();
+    ctx.ellipse(cx + d * W * 0.135, H * 0.15, W * 0.035, H * 0.055, 0, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  // 앞 펜더
+  ctx.fillStyle = shade(body, -0.1);
+  roundRectPath(ctx, cx - W * 0.075, H * 0.10, W * 0.15, H * 0.16, W * 0.05);
+  ctx.fill();
+
+  // 페어링 (앞이 넓고 허리로 갈수록 좁아진다)
+  const fg = ctx.createLinearGradient(cx - W * 0.44, 0, cx + W * 0.44, 0);
+  fg.addColorStop(0, shade(body, -0.42));
+  fg.addColorStop(0.2, shade(body, 0.1));
+  fg.addColorStop(0.42, shade(body, 0.34));
+  fg.addColorStop(0.6, body);
+  fg.addColorStop(0.85, shade(body, -0.22));
+  fg.addColorStop(1, shade(body, -0.5));
+  ctx.fillStyle = fg;
+  ctx.beginPath();
+  ctx.moveTo(cx - W * 0.16, H * 0.24);
+  ctx.quadraticCurveTo(cx, H * 0.205, cx + W * 0.16, H * 0.24);
+  ctx.bezierCurveTo(cx + W * 0.44, H * 0.32, cx + W * 0.42, H * 0.46, cx + W * 0.26, H * 0.58);
+  ctx.quadraticCurveTo(cx, H * 0.63, cx - W * 0.26, H * 0.58);
+  ctx.bezierCurveTo(cx - W * 0.42, H * 0.46, cx - W * 0.44, H * 0.32, cx - W * 0.16, H * 0.24);
+  ctx.closePath();
+  ctx.fill();
+  ctx.strokeStyle = "rgba(0,0,0,0.3)";
+  ctx.lineWidth = Math.max(1, W * 0.01);
+  ctx.stroke();
+
+  // 에어 인테이크 (검정)
+  ctx.fillStyle = "#1a1c22";
+  [-1, 1].forEach((d) => {
+    roundRectPath(ctx, cx + d * W * 0.30 - (d > 0 ? 0 : W * 0.10), H * 0.36, W * 0.10, H * 0.14, W * 0.03);
+    ctx.fill();
+  });
+
+  // 윈드스크린 (반투명)
+  ctx.fillStyle = "rgba(226,238,255,0.42)";
+  roundRectPath(ctx, cx - W * 0.15, H * 0.255, W * 0.30, H * 0.10, W * 0.07);
+  ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.5)";
+  ctx.lineWidth = Math.max(1, W * 0.008);
+  ctx.stroke();
+
+  // 미러
+  ctx.fillStyle = "#22252c";
+  [-1, 1].forEach((d) => {
+    ctx.save();
+    ctx.translate(cx + d * W * 0.36, H * 0.30);
+    ctx.rotate(d * 0.4);
+    roundRectPath(ctx, -W * 0.05, -H * 0.018, W * 0.10, H * 0.036, W * 0.02);
+    ctx.fill();
+    ctx.restore();
+  });
+
+  // 탱크 + 하이라이트
+  ctx.fillStyle = shade(body, 0.16);
+  roundRectPath(ctx, cx - W * 0.16, H * 0.50, W * 0.32, H * 0.16, W * 0.08);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.26)";
+  roundRectPath(ctx, cx - W * 0.12, H * 0.515, W * 0.09, H * 0.12, W * 0.04);
+  ctx.fill();
+
+  // 라이더 (검정 슈트 + 헬멧)
+  ctx.fillStyle = "#191b21";
+  roundRectPath(ctx, cx - W * 0.20, H * 0.44, W * 0.40, H * 0.24, W * 0.14);
+  ctx.fill();
+  ctx.fillStyle = "#0f1116";
+  ctx.beginPath();
+  ctx.arc(cx, H * 0.44, W * 0.145, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = shade(body, 0.1);
+  ctx.beginPath();
+  ctx.arc(cx, H * 0.435, W * 0.115, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = "rgba(255,255,255,0.85)";
+  roundRectPath(ctx, cx - W * 0.07, H * 0.40, W * 0.14, H * 0.022, W * 0.01);
+  ctx.fill();
+
+  // 시트 + 테일
+  ctx.fillStyle = "#171a20";
+  roundRectPath(ctx, cx - W * 0.15, H * 0.64, W * 0.30, H * 0.14, W * 0.07);
+  ctx.fill();
+  ctx.fillStyle = fg;
+  ctx.beginPath();
+  ctx.moveTo(cx - W * 0.15, H * 0.72);
+  ctx.lineTo(cx + W * 0.15, H * 0.72);
+  ctx.quadraticCurveTo(cx + W * 0.07, H * 0.94, cx, H * 0.95);
+  ctx.quadraticCurveTo(cx - W * 0.07, H * 0.94, cx - W * 0.15, H * 0.72);
+  ctx.closePath();
+  ctx.fill();
+
+  // 배기 + 테일램프
+  ctx.fillStyle = "#2b2e35";
+  roundRectPath(ctx, cx - W * 0.06, H * 0.86, W * 0.12, H * 0.07, W * 0.03);
+  ctx.fill();
+  ctx.save();
+  ctx.shadowColor = "rgba(255,50,50,0.95)";
+  ctx.shadowBlur = W * 0.14;
+  ctx.fillStyle = "#ff2f2f";
+  roundRectPath(ctx, cx - W * 0.05, H * 0.925, W * 0.10, H * 0.018, H * 0.009);
+  ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = "#fff8e2";
+  roundRectPath(ctx, cx - W * 0.045, H * 0.045, W * 0.09, H * 0.016, H * 0.008);
+  ctx.fill();
+}
+
+function drawCarTop(ctx, W, H, kind, colors) {
+  if (kind === "bike") return drawBike(ctx, W, H, colors);
+  if (kind === "truck") return drawFlatbed(ctx, W, H, colors);
+  if (kind === "bus") return drawBus(ctx, W, H, colors);
+  return drawSedan(ctx, W, H, kind, colors);
 }
 
 // 스프라이트 캐시 -------------------------------------------------------

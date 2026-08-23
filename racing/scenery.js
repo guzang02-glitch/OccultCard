@@ -15,9 +15,11 @@ function makeRng(seed) {
 
 function topShadow(ctx, drawShape) {
   ctx.save();
-  ctx.translate(6, 8);
-  ctx.filter = "blur(4px)";
-  ctx.fillStyle = "rgba(0,0,0,0.38)";
+  ctx.shadowColor = "rgba(0,0,0,0.42)";
+  ctx.shadowBlur = 10;
+  ctx.shadowOffsetX = 7;
+  ctx.shadowOffsetY = 9;
+  ctx.fillStyle = "rgba(0,0,0,0.5)";
   drawShape(ctx);
   ctx.restore();
 }
@@ -125,26 +127,146 @@ function objRockTop(c1, c2) {
   return { cv, worldW: 560 };
 }
 
-function objBuildingTop(c1, c2, accent) {
-  const S = 260, cv = makeCanvas(S, S * 1.15), ctx = cv.getContext("2d");
-  const H = S * 1.15;
-  const rng = makeRng(17);
-  const shape = (c) => { roundRectPath(c, S * 0.08, H * 0.06, S * 0.84, H * 0.86, 6); c.fill(); };
-  topShadow(ctx, shape);
-  ctx.fillStyle = c1; shape(ctx);
-  ctx.fillStyle = c2;
-  ctx.fillRect(S * 0.08, H * 0.06, S * 0.84, H * 0.08);       // 옥상 그늘
-  ctx.fillRect(S * 0.08, H * 0.06, S * 0.10, H * 0.86);
-  // 옥상 설비
-  ctx.fillStyle = accent;
-  for (let i = 0; i < 5; i++) {
-    ctx.fillRect(S * (0.22 + rng() * 0.55), H * (0.24 + rng() * 0.55), S * 0.14, H * 0.10);
-  }
-  ctx.strokeStyle = "rgba(255,255,255,0.16)";
-  ctx.lineWidth = 3;
-  roundRectPath(ctx, S * 0.12, H * 0.10, S * 0.76, H * 0.78, 4);
-  ctx.stroke();
-  return { cv, worldW: 1900 };
+// 항공 시점 건물 -----------------------------------------------------
+// 옥상면 + 오른쪽/아래 벽면(창문 격자) + 길게 드리운 그림자.
+// 빛 방향을 우하단으로 통일해서 여러 건물이 같은 시각에 찍힌 사진처럼 보이게 한다.
+function extrudedBuilding(W, H, roofCol, winCol, ex, ey, grid, roofDetail) {
+  const cv = makeCanvas(W, H), ctx = cv.getContext("2d");
+  const x = W * 0.05, y = H * 0.05;
+  const w = W * 0.95 - ex - x, h = H * 0.95 - ey - y;
+  const sx = ex * 2.1, sy = ey * 2.1;
+
+  // 드리운 그림자
+  ctx.fillStyle = "rgba(0,0,0,0.34)";
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x + sx, y + h + sy);
+  ctx.lineTo(x + w + sx, y + h + sy);
+  ctx.lineTo(x + w + sx, y + sy);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h);
+  ctx.closePath();
+  ctx.fill();
+
+  // 벽면 + 창문 격자 (단위 사각형을 평행사변형으로 변환해서 그린다)
+  const wall = (m, fill, cols, rows) => {
+    ctx.save();
+    ctx.transform(m[0], m[1], m[2], m[3], m[4], m[5]);
+    ctx.fillStyle = fill;
+    ctx.fillRect(0, 0, 1, 1);
+    ctx.fillStyle = winCol;
+    const px = 0.30 / cols, py = 0.34 / rows;
+    for (let i = 0; i < cols; i++) {
+      for (let j = 0; j < rows; j++) {
+        ctx.fillRect(i / cols + px, j / rows + py, 1 / cols - px * 2, 1 / rows - py * 2);
+      }
+    }
+    ctx.restore();
+  };
+  wall([ex, ey, 0, h, x + w, y], shade(roofCol, -0.42), grid.side, grid.floors);
+  wall([w, 0, ex, ey, x, y + h], shade(roofCol, -0.55), grid.front, grid.floors);
+
+  // 옥상면
+  const g = ctx.createLinearGradient(x, y, x + w, y + h);
+  g.addColorStop(0, shade(roofCol, 0.16));
+  g.addColorStop(0.55, roofCol);
+  g.addColorStop(1, shade(roofCol, -0.14));
+  ctx.fillStyle = g;
+  ctx.fillRect(x, y, w, h);
+  // 파라펫
+  ctx.strokeStyle = "rgba(255,255,255,0.28)";
+  ctx.lineWidth = Math.max(2, W * 0.016);
+  ctx.strokeRect(x + W * 0.012, y + W * 0.012, w - W * 0.024, h - W * 0.024);
+
+  roofDetail(ctx, x, y, w, h);
+  return { cv };
+}
+
+function objTowerTop(c1, c2, accent) {
+  const W = 330, H = 390;
+  const r = extrudedBuilding(W, H, c1, accent, W * 0.20, H * 0.17,
+    { side: 5, floors: 9, front: 4 }, (ctx, x, y, w, h) => {
+      const rng = makeRng(101);
+      // 유리 옥상 반사
+      const g = ctx.createLinearGradient(x, y, x + w, y + h);
+      g.addColorStop(0, "rgba(255,255,255,0.20)");
+      g.addColorStop(0.5, "rgba(255,255,255,0.03)");
+      g.addColorStop(1, "rgba(0,0,0,0.18)");
+      ctx.fillStyle = g;
+      ctx.fillRect(x, y, w, h);
+      // 기계실
+      ctx.fillStyle = shade(c1, -0.32);
+      ctx.fillRect(x + w * 0.26, y + h * 0.30, w * 0.44, h * 0.34);
+      ctx.fillStyle = "rgba(255,255,255,0.16)";
+      ctx.fillRect(x + w * 0.26, y + h * 0.30, w * 0.44, h * 0.07);
+      // 실외기
+      ctx.fillStyle = shade(c1, -0.5);
+      for (let i = 0; i < 5; i++) {
+        ctx.fillRect(x + w * (0.08 + rng() * 0.74), y + h * (0.06 + rng() * 0.82), w * 0.11, h * 0.07);
+      }
+      // 헬리패드
+      ctx.strokeStyle = "rgba(255,255,255,0.5)";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.arc(x + w * 0.5, y + h * 0.82, w * 0.13, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.fillRect(x + w * 0.44, y + h * 0.76, w * 0.03, h * 0.12);
+      ctx.fillRect(x + w * 0.53, y + h * 0.76, w * 0.03, h * 0.12);
+      ctx.fillRect(x + w * 0.44, y + h * 0.815, w * 0.12, h * 0.02);
+      // 항공장애등
+      ctx.fillStyle = "#ff4d4d";
+      [[0.06, 0.06], [0.94, 0.06], [0.06, 0.94], [0.94, 0.94]].forEach(([u, v]) => {
+        ctx.beginPath();
+        ctx.arc(x + w * u, y + h * v, 4, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    });
+  return { cv: r.cv, worldW: 2500 };
+}
+
+function objBlockTop(c1, c2, accent) {
+  const W = 290, H = 310;
+  const r = extrudedBuilding(W, H, shade(c1, -0.12), accent, W * 0.11, H * 0.09,
+    { side: 4, floors: 4, front: 3 }, (ctx, x, y, w, h) => {
+      const rng = makeRng(211);
+      // 옥상 자갈
+      ctx.fillStyle = "rgba(255,255,255,0.10)";
+      for (let i = 0; i < 300; i++) ctx.fillRect(x + rng() * w, y + rng() * h, 2, 2);
+      // 계단실
+      ctx.fillStyle = shade(c1, -0.42);
+      ctx.fillRect(x + w * 0.10, y + h * 0.12, w * 0.26, h * 0.22);
+      ctx.fillStyle = "rgba(255,255,255,0.14)";
+      ctx.fillRect(x + w * 0.10, y + h * 0.12, w * 0.26, h * 0.05);
+      // 실외기 / 환기구
+      ctx.fillStyle = shade(c1, -0.55);
+      for (let i = 0; i < 6; i++) {
+        ctx.fillRect(x + w * (0.42 + rng() * 0.44), y + h * (0.08 + rng() * 0.76), w * 0.12, h * 0.08);
+      }
+      // 물탱크 (다리 + 원통)
+      const wx = x + w * 0.70, wy = y + h * 0.74, wr = w * 0.14;
+      ctx.strokeStyle = "rgba(40,32,26,0.6)";
+      ctx.lineWidth = 4;
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(([a, b]) => {
+        ctx.beginPath();
+        ctx.moveTo(wx, wy);
+        ctx.lineTo(wx + a * wr * 0.9, wy + b * wr * 0.9);
+        ctx.stroke();
+      });
+      ctx.fillStyle = "rgba(0,0,0,0.3)";
+      ctx.beginPath();
+      ctx.arc(wx + 6, wy + 7, wr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#7d5c3d";
+      ctx.beginPath();
+      ctx.arc(wx, wy, wr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "#96714a";
+      ctx.beginPath();
+      ctx.arc(wx - wr * 0.22, wy - wr * 0.22, wr * 0.6, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  return { cv: r.cv, worldW: 1900 };
 }
 
 function objLampTop(glow) {
@@ -203,7 +325,8 @@ const OBJ_GENS = {
   palm: (b) => objPalmTop(b.o1, b.o2),
   cactus: (b) => objCactusTop(b.o1, b.o2),
   rock: (b) => objRockTop(b.o1, b.o2),
-  building: (b) => objBuildingTop(b.o1, b.o2, b.o3),
+  tower: (b) => objTowerTop(b.o1, b.o2, b.o3),
+  block: (b) => objBlockTop(b.o1, b.o2, b.o3),
   lamp: (b) => objLampTop(b.o3),
   sign: (b) => objSignTop(b.o1, b.signText || "!"),
   bush: (b) => objBushTop(b.o1, b.o2),
@@ -211,21 +334,21 @@ const OBJ_GENS = {
 
 // --- 바이옴 정의 ------------------------------------------------------
 //  ground1/2 : 지면 교차 밴드 색 (스크롤 감각의 핵심)
-//  road      : 노면 단색           shoulder : 갓길
+//  road      : 노면 단색           shoulder : 갓길   walk : 인도
 //  rumble1/2 : 도로 경계 스트립     lane : 차선 도색
 //  overlay   : 화면 전체 색보정
 const BIOMES = [
   {
-    id: "dawn", name: "여명의 도시",
+    id: "dawn", walk: "#7b7b92", name: "여명의 도시",
     ground1: "#4b4260", ground2: "#443a57",
     road1: "#54545e", shoulder: "#63636e",
     rumble1: "#ff5470", rumble2: "#f4f4f4", lane: "#ffffff",
     overlay: "rgba(255,138,90,0.10)",
-    objects: ["building", "lamp", "tree"],
-    o1: "#4a4468", o2: "#332e4c", o3: "#ffd58a", signText: "60",
+    objects: ["tower", "block", "lamp"],
+    o1: "#6b6b82", o2: "#3c3c52", o3: "#ffe3ac", signText: "60",
   },
   {
-    id: "desert", name: "사막 고속도로",
+    id: "desert", walk: "#c9b48c", name: "사막 고속도로",
     ground1: "#d9a86c", ground2: "#cfa065",
     road1: "#6e6559", shoulder: "#8a7c68",
     rumble1: "#e0603c", rumble2: "#f7e6c4", lane: "#fff6df",
@@ -234,16 +357,16 @@ const BIOMES = [
     o1: "#4e8a4a", o2: "#3a6b39", o3: "#ffe08a", signText: "SLOW",
   },
   {
-    id: "neon", name: "네온 나이트",
+    id: "neon", walk: "#2b3050", name: "네온 나이트",
     ground1: "#171827", ground2: "#131422",
     road1: "#2c2c3c", shoulder: "#3a3a4e",
     rumble1: "#ff2e88", rumble2: "#00e5ff", lane: "#8ef6ff",
     overlay: "rgba(20,10,60,0.34)",
-    objects: ["building", "lamp", "sign"],
-    o1: "#1b1f42", o2: "#12142c", o3: "#66f7ff", signText: "∞",
+    objects: ["tower", "block", "lamp"],
+    o1: "#252b55", o2: "#141833", o3: "#7df3ff", signText: "∞",
   },
   {
-    id: "snow", name: "설원 구간",
+    id: "snow", walk: "#cfd9e6", name: "설원 구간",
     ground1: "#eaf2fb", ground2: "#dde8f5",
     road1: "#586470", shoulder: "#6e7a86",
     rumble1: "#cf4b5a", rumble2: "#ffffff", lane: "#ffffff",
@@ -252,7 +375,7 @@ const BIOMES = [
     o1: "#4a6f66", o2: "#33534c", o3: "#fff2c0", signText: "❄",
   },
   {
-    id: "coast", name: "해안 도로",
+    id: "coast", walk: "#c8c2a4", name: "해안 도로",
     ground1: "#ddd3a2", ground2: "#d2c896",
     road1: "#525d66", shoulder: "#6d7882",
     rumble1: "#ffffff", rumble2: "#2f7fbf", lane: "#ffffff",
@@ -261,7 +384,7 @@ const BIOMES = [
     o1: "#2f8f5e", o2: "#1f6b45", o3: "#ffe08a", signText: "80",
   },
   {
-    id: "forest", name: "황혼의 숲",
+    id: "forest", walk: "#6b6a62", name: "황혼의 숲",
     ground1: "#33452f", ground2: "#2c3c29",
     road1: "#4b4b4b", shoulder: "#5c5a54",
     rumble1: "#ffb400", rumble2: "#3a2a2a", lane: "#ffe9c2",
@@ -270,7 +393,7 @@ const BIOMES = [
     o1: "#2f5a2c", o2: "#1e3a1e", o3: "#ffd58a", signText: "!",
   },
   {
-    id: "volcano", name: "화산 지대",
+    id: "volcano", walk: "#584a48", name: "화산 지대",
     ground1: "#3a2320", ground2: "#33201d",
     road1: "#3f3638", shoulder: "#4d4245",
     rumble1: "#ff3b1f", rumble2: "#ffd08a", lane: "#ffcf9a",

@@ -346,6 +346,15 @@ function renderGroundAndRoad(pal, zoom) {
     ctx.fillRect(0, y - bandPx, W, bandPx);
   }
 
+  // 인도(연석 포함) - 도로 밖 도시 느낌을 살린다
+  const walk = shoulder * 2.2;
+  ctx.fillStyle = pal.walk;
+  ctx.fillRect(left - shoulder - walk, 0, walk, H);
+  ctx.fillRect(right + shoulder, 0, walk, H);
+  ctx.fillStyle = "rgba(0,0,0,0.22)";
+  ctx.fillRect(left - shoulder - walk, 0, walk * 0.16, H);
+  ctx.fillRect(right + shoulder + walk * 0.84, 0, walk * 0.16, H);
+
   // 갓길
   ctx.fillStyle = pal.shoulder;
   ctx.fillRect(left - shoulder, 0, shoulder, H);
@@ -862,8 +871,6 @@ const HUD = {
   laneSpeed: document.getElementById("hud-lane-speed"),
   combo: document.getElementById("hud-combo"),
   sceneName: document.getElementById("scene-name"),
-  warn: document.getElementById("warn"),
-  brake: document.getElementById("brake-msg"),
   gauge: document.getElementById("gauge-fill"),
 };
 
@@ -889,10 +896,10 @@ function buildMenu() {
         ${statRow("차폭", type.width + "", 1 - (type.width - 130) / 300)}
         ${statRow("배율", "x" + type.scoreMul.toFixed(2), (type.scoreMul - 0.9) / 0.8)}
       </dl>`;
-    const c = makeCanvas(104, 104);
+    const c = makeCanvas(140, 140);
     const cc = c.getContext("2d");
-    const sh = 96, sw = sh / type.topAspect;
-    cc.drawImage(type.sprite, (104 - sw) / 2, 4, sw, sh);
+    const sh = 132, sw = sh / type.topAspect;
+    cc.drawImage(type.sprite, (140 - sw) / 2, 4, sw, sh);
     el.querySelector(".car-thumb").appendChild(c);
     el.addEventListener("click", () => {
       State.car = type;
@@ -937,25 +944,12 @@ function updateHUD() {
   } else {
     HUD.combo.classList.remove("show");
   }
-
-  // 뒤에서 접근 중인 차량 경고
-  let warn = false;
-  for (const car of State.cars) {
-    if (car.rel < -H * 0.2 && car.rel > -H * 0.8 && car.speed > State.speed + 2 &&
-      Math.abs(car.offX - State.offsetX) < laneWidthFrac * 0.8) { warn = true; break; }
-  }
-  HUD.warn.classList.toggle("show", warn);
 }
 
 // ---------------------------- 입력 ----------------------------------
 function moveLane(dir) {
   if (State.mode !== "playing") return;
   State.targetLane = Util.limit(State.targetLane + dir, 0, LANES - 1);
-}
-
-function brakeFail() {
-  HUD.brake.classList.add("show");
-  setTimeout(() => HUD.brake.classList.remove("show"), 1200);
 }
 
 window.addEventListener("keydown", (e) => {
@@ -965,8 +959,7 @@ window.addEventListener("keydown", (e) => {
     case "ArrowRight": case "d": case "D":
       moveLane(1); e.preventDefault(); break;
     case "ArrowDown": case "s": case "S": case " ":
-      if (State.mode === "playing") brakeFail();
-      e.preventDefault(); break;
+      e.preventDefault(); break;   // 브레이크는 고장났다 (아무 일도 일어나지 않는다)
     case "Enter":
       if (State.mode === "menu" || State.mode === "crashed") startGame();
       break;
@@ -1017,7 +1010,6 @@ function startGame() {
   menuEl.classList.remove("show");
   overEl.classList.remove("show");
   document.body.classList.add("playing");
-  brakeFail();
   Sound.start();
 }
 
