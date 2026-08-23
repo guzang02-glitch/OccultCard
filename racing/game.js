@@ -29,13 +29,21 @@ const CFG = {
   hitY: 0.66,
 
   // 관리 범위가 넓어진 만큼 대수도 함께 늘려 화면상 밀도를 유지한다
-  trafficMin: 45,
-  trafficMax: 83,
+  trafficMin: 50,
+  trafficMax: 91,
+  laneQuotaLeft: 1.2,     // 1차선 정원 배율 (9차선 = 1.0)
   spawnMargin: 140,       // 화면 밖 이만큼(px) 더 나간 곳에서 생성한다
   laneBiasStrength: 1.45, // 차폭에 따른 차선 편향 세기 (0이면 차종을 완전 무작위로)
 
-  aheadWin: 3.2,          // × 화면높이 : 트래픽 관리 범위(앞)
+  // 아슬아슬 회피 판정: 차선을 뜨는 순간, 원래 차선의 앞차 후면까지
+  // 남은 시간이 이 값보다 짧으면 인정한다
+  dodgeTtc: 0.62,
+  dodgeMaxGap: 3.2,       // × 내 차 길이 : 이보다 멀면 아무리 빨라도 인정 안 함
+
+  aheadWin: 3.2,          // × 화면높이 : 트래픽 관리 범위(앞) = 레이더 표시 범위
   behindWin: 1.2,         // × 화면높이 : 트래픽 관리 범위(뒤)
+  spawnBandLo: 1.02,      // 생성 구간: 관리 범위의 이 배율부터
+  spawnBandHi: 1.14,      // 이 배율까지 (레이더에도 안 잡히는 곳에서 만든다)
 
   // 눈이 피로하지 않게: 차선은 실선, 노면은 단색, 지면 밴드만 아주 길게
   bandLen: 700,           // 지면 교차 밴드 길이
@@ -134,17 +142,14 @@ function trafficCount() {
   return Math.round(Util.limit(CFG.trafficMin + State.elapsed / 5, CFG.trafficMin, CFG.trafficMax));
 }
 
-function laneOccupied(lane, rel, gap, ignore) {
-  for (const c of State.cars) {
-    if (c === ignore) continue;
-    if (c.lane !== lane) continue;
-    if (Math.abs(c.rel - rel) < gap) return true;
-  }
-  return false;
+// 차선 정원: 좌측(고속) 차선일수록 조금 더 많이 둔다
+function laneQuota(lane) {
+  const t = lane / (LANES - 1);   // 0 = 1차선, 1 = 9차선
+  return CFG.laneQuotaLeft + (1 - CFG.laneQuotaLeft) * t;
 }
 
-// 차량이 가장 적은 차선을 고른다 (동수면 그중 무작위) - 차선별 밀도를 고르게 유지
-function emptiestLane(ignore) {
+// 정원 대비 가장 비어 있는 차선을 고른다 (동률이면 그중 무작위)
+function neediestLane(ignore, skip) {
   const counts = new Array(LANES).fill(0);
   for (const c of State.cars) {
     if (c === ignore) continue;
@@ -153,10 +158,47 @@ function emptiestLane(ignore) {
   let min = Infinity;
   const best = [];
   for (let i = 0; i < LANES; i++) {
-    if (counts[i] < min) { min = counts[i]; best.length = 0; best.push(i); }
-    else if (counts[i] === min) best.push(i);
+    if (skip && skip.has(i)) continue;
+    const fill = counts[i] / laneQuota(i);
+    if (fill < min - 1e-9) { min = fill; best.length = 0; best.push(i); }
+    else if (Math.abs(fill - min) < 1e-9) best.push(i);
   }
-  return best[Util.randInt(0, best.length - 1)];
+  return best.length ? best[Util.randInt(0, best.length - 1)] : -1;
+}
+
+// 해당 차선에서 다른 차량과 겹치지 않는 빈 자리를 찾는다 (없으면 null).
+// 생성 시점부터 간격을 확보하므로 나중에 밀려나는 일이 없다.
+function freeRelInLane(lane, len, lo, hi, ignore) {
+  const margin = len * 0.75 + 110;
+  const busy = [];
+  // 플레이어 주변은 비워 둔다 (내 차선은 넉넉히, 옆 차선은 바로 옆만)
+  const laneDist = Math.min(Math.abs(lane - State.lane), Math.abs(lane - State.targetLane));
+  if (laneDist === 0) busy.push([-H * 0.9, H * 0.9]);
+  else if (laneDist === 1) busy.push([-H * 0.34, H * 0.34]);
+  for (const c of State.cars) {
+    if (c === ignore || c.lane !== lane) continue;
+    const half = carL(c.type) * 0.75 + margin;
+    busy.push([c.rel - half, c.rel + half]);
+  }
+  busy.sort((a, b) => a[0] - b[0]);
+
+  const slots = [];
+  let cur = lo;
+  for (const [a, b] of busy) {
+    if (b <= cur) continue;
+    if (a > cur) slots.push([cur, Math.min(a, hi)]);
+    cur = Math.max(cur, b);
+    if (cur >= hi) break;
+  }
+  if (cur < hi) slots.push([cur, hi]);
+
+  const valid = slots.filter(([a, b]) => b - a > 10);
+  if (!valid.length) return null;
+  let total = 0;
+  const cum = valid.map(([a, b]) => (total += b - a));
+  const r = Math.random() * total;
+  const [a, b] = valid[cum.findIndex((c) => r <= c)];
+  return Util.rand(a, b);
 }
 
 // 차선 성향: 차폭이 클수록 +1(우측 저속 차선), 작을수록 -1(좌측 고속 차선)
@@ -178,23 +220,39 @@ function pickType(lane) {
 }
 
 function spawnCar(recycled, scatter) {
-  const lane = emptiestLane(recycled);
-  const type = pickType(lane);
-  const color = type.color || TRAFFIC_COLORS[Util.randInt(0, TRAFFIC_COLORS.length - 1)];
-  const speed = LANE_SPEEDS[lane] * Util.rand(0.95, 1.06);
-  const ahead = speed < State.speed;   // 나보다 느리면 앞쪽에서 다가온다
-  const len = carL(type);
-  // 화면 위/아래 경계 바깥 (현재 축소율 기준) - 눈앞에서 갑자기 나타나지 않게
+  // 화면 밖 경계 (기준 px). 차량 길이의 절반까지 더해서 스프라이트가
+  // 조금이라도 화면에 걸친 상태로 생성되지 않게 한다.
   const zoom = zoomOf();
-  const offTop = (playerY + CFG.spawnMargin) / zoom;
-  const offBottom = (H - playerY + CFG.spawnMargin) / zoom;
-  let rel = 0;
-  for (let tries = 0; tries < 14; tries++) {
-    rel = scatter
-      ? Util.rand(-BEHIND * 0.92, AHEAD * 0.92)
-      : (ahead ? Util.rand(offTop, AHEAD) : -Util.rand(offBottom, BEHIND));
-    if (!laneOccupied(lane, rel, len * 1.6 + 90, recycled)) break;
+  const topEdge = (playerY + CFG.spawnMargin) / zoom;
+  const botEdge = (H - playerY + CFG.spawnMargin) / zoom;
+
+  const skip = new Set();
+  let lane = -1, type = null, rel = null;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    lane = neediestLane(recycled, skip);
+    if (lane < 0) return null;
+    type = pickType(lane);
+    const half = carL(type) / 2;
+    const ahead = LANE_SPEEDS[lane] < State.speed;   // 나보다 느리면 앞쪽에서 다가온다
+    let lo, hi;
+    if (scatter) {
+      lo = -BEHIND * 0.92; hi = AHEAD * 0.92;
+    } else if (ahead) {
+      // 레이더 범위 바깥에서 만들어 자연스럽게 흘러 들어오게 한다
+      lo = Math.max(AHEAD * CFG.spawnBandLo, topEdge + half);
+      hi = Math.max(lo + carL(type), AHEAD * CFG.spawnBandHi);
+    } else {
+      hi = -Math.max(BEHIND * CFG.spawnBandLo, botEdge + half);
+      lo = Math.min(hi - carL(type), -BEHIND * CFG.spawnBandHi);
+    }
+    rel = freeRelInLane(lane, carL(type), lo, hi, recycled);
+    if (rel !== null) break;
+    skip.add(lane);
   }
+  if (rel === null) return null;   // 빈 자리가 없으면 이번엔 만들지 않는다
+
+  const speed = LANE_SPEEDS[lane] * Util.rand(0.95, 1.06);
+  const color = type.color || TRAFFIC_COLORS[Util.randInt(0, TRAFFIC_COLORS.length - 1)];
   const car = recycled || {};
   car.type = type;
   car.sprite = getCarSprite(type, color);
@@ -204,48 +262,43 @@ function spawnCar(recycled, scatter) {
   car.speed = speed;
   car.baseSpeed = speed;
   car.prevRel = rel;
-  car.scored = false;
+  car.dodged = false;
   return car;
 }
 
 function resetTraffic() {
   State.cars = [];
-  for (let i = 0; i < trafficCount(); i++) State.cars.push(spawnCar(null, true));
-  // 출발 직후 바로 앞뒤에 붙어 있는 차량은 밀어낸다
-  for (const c of State.cars) {
-    if (Math.abs(c.rel) < H * 0.55) c.rel += H * 0.9 * Math.sign(c.rel || 1);
+  for (let i = 0; i < trafficCount(); i++) {
+    const car = spawnCar(null, true);
+    if (!car) break;
+    State.cars.push(car);
   }
 }
 
 function updateTraffic(dt) {
   const relK = H * CFG.relK;
-  while (State.cars.length < trafficCount()) State.cars.push(spawnCar(null));
+  while (State.cars.length < trafficCount()) {
+    const car = spawnCar(null);
+    if (!car) break;   // 자리가 없으면 다음 프레임에 다시 시도
+    State.cars.push(car);
+  }
 
   for (const car of State.cars) {
     car.rel += (car.speed - State.speed) * relK * dt;
 
     // 관리 범위를 벗어난 차량 재활용
-    if (car.rel > AHEAD * 1.15 || car.rel < -BEHIND * 1.15) {
+    if (car.rel > AHEAD * 1.22 || car.rel < -BEHIND * 1.22) {
       spawnCar(car);
       continue;
     }
 
-    // 스쳐 지나가는 순간: 바람소리 + 아슬아슬 판정
-    if (!car.scored && Math.sign(car.rel) !== Math.sign(car.prevRel)) {
+    // 옆을 스쳐 지나가는 순간 바람 소리
+    if (Math.sign(car.rel) !== Math.sign(car.prevRel)) {
       const gapPx = Math.abs(car.offX - State.offsetX) * roadPxBase / 2;
       const near = (carW(car.type) + carW(State.car)) / 2;
       if (gapPx < near * 5) {
         Sound.whoosh((car.offX - State.offsetX) * 2, Util.limit(1 - gapPx / (near * 5), 0.15, 1)
           * Util.limit(Math.abs(car.speed - State.speed) / 120, 0.2, 1));
-      }
-      if (gapPx < near * 2.1) {
-        State.nearMiss++;
-        State.combo++;
-        State.comboTimer = 2.6;
-        State.score += 40 * Math.min(State.combo, 10) * State.car.scoreMul;
-        State.flash = Math.min(1, State.flash + 0.3);
-        Sound.blip(Math.min(State.combo, 8));
-        car.scored = true;
       }
     }
     car.prevRel = car.rel;
@@ -264,7 +317,8 @@ function applyCarFollowing(dt) {
     const minGap = lead ? (carL(car.type) + carL(lead.type)) / 2 * 1.25 + 80 : 0;
     if (lead && bestGap < minGap * 1.7) {
       car.speed = Math.min(car.baseSpeed, lead.speed * 0.99);
-      if (bestGap < minGap) car.rel = lead.rel - minGap;   // 겹침 방지
+      // 혹시 겹쳤다면 순간이동 대신 서서히 간격을 회복한다
+      if (bestGap < minGap) car.rel -= (minGap - bestGap) * Math.min(1, dt * 5);
     } else {
       car.speed += (car.baseSpeed - car.speed) * Math.min(1, dt * 2);
     }
@@ -966,9 +1020,40 @@ function updateHUD() {
 }
 
 // ---------------------------- 입력 ----------------------------------
+// 차선을 벗어나는 순간 판정: 원래 차선의 앞차 후면까지 남은 시간이 짧으면 "아슬아슬"
+function judgeDodge(fromLane) {
+  const relK = H * CFG.relK;
+  const myLen = carL(State.car);
+  let best = null, bestTtc = Infinity;
+  for (const car of State.cars) {
+    if (car.lane !== fromLane || car.dodged) continue;
+    const gap = car.rel - (carL(car.type) + myLen) / 2;
+    const closing = State.speed - car.speed;
+    if (gap < 0 || closing <= 0) continue;
+    if (gap > myLen * CFG.dodgeMaxGap) continue;
+    const ttc = gap / (closing * relK);
+    if (ttc < bestTtc) { bestTtc = ttc; best = car; }
+  }
+  if (!best || bestTtc > CFG.dodgeTtc) return;
+
+  best.dodged = true;
+  State.nearMiss++;
+  State.combo++;
+  State.comboTimer = 2.6;
+  // 남은 시간이 짧을수록 보너스가 커진다
+  const sharp = 1 + (1 - bestTtc / CFG.dodgeTtc) * 1.5;
+  State.score += 60 * sharp * Math.min(State.combo, 10) * State.car.scoreMul;
+  State.flash = Math.min(1, State.flash + 0.25 * sharp);
+  Sound.blip(Math.min(State.combo, 8));
+}
+
 function moveLane(dir) {
   if (State.mode !== "playing") return;
-  State.targetLane = Util.limit(State.targetLane + dir, 0, LANES - 1);
+  const from = State.targetLane;
+  const to = Util.limit(from + dir, 0, LANES - 1);
+  if (to === from) return;
+  State.targetLane = to;
+  judgeDodge(from);
 }
 
 window.addEventListener("keydown", (e) => {
