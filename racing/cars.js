@@ -50,16 +50,16 @@ const PLAYER_RED = { body: "#ff2f2f", glass: "#180f14" };
 const CAR_TYPES = [
   {
     id: "sports", name: "팔콘 GT", tag: "스포츠카", kind: "sports",
-    desc: "낮고 빠르다. 가속이 붙으면 곧 지옥.",
+    desc: "차폭이 넓어 빠져나갈 틈이 좁다. 대신 점수 배율이 높다.",
     startSpeed: 112, accel: 1.45, handling: 2.9,
-    width: 292, topAspect: 2.35, scoreMul: 1.35,
+    width: 292, topAspect: 2.35, scoreMul: 1.5,
     colors: PLAYER_RED,
   },
   {
     id: "bike", name: "제트 R", tag: "오토바이", kind: "bike",
-    desc: "폭이 절반, 조향은 최고. 대신 실수 한 번이면 끝.",
+    desc: "폭이 절반, 조향도 가장 빠르다. 가장 무난한 선택.",
     startSpeed: 108, accel: 1.6, handling: 3.8,
-    width: 148, topAspect: 2.6, scoreMul: 1.7,
+    width: 148, topAspect: 2.6, scoreMul: 1.0,
     colors: PLAYER_RED,
   },
 ];

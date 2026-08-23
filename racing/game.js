@@ -498,26 +498,6 @@ function renderPlayer(zoom) {
   ctx.fillRect(p.x - p.w * 0.42, p.y + p.h * 0.5, p.w * 0.84, 2);
 }
 
-const particles = [];
-function initParticles() {
-  particles.length = 0;
-  for (let i = 0; i < 140; i++) {
-    particles.push({ x: Math.random(), y: Math.random(), s: 0.5 + Math.random() * 1.3, r: 1 + Math.random() * 2.2 });
-  }
-}
-
-function renderParticles(dt, pct) {
-  const conf = (State.fade > 0.5 ? BIOMES[State.biomeB] : BIOMES[State.biomeA]).particle;
-  ctx.fillStyle = conf.color;
-  const n = Math.min(particles.length, conf.n);
-  for (let i = 0; i < n; i++) {
-    const p = particles[i];
-    p.y += (0.35 + pct * pct * 4.5) * p.s * dt;
-    if (p.y > 1.05) { p.y = -0.05; p.x = Math.random(); }
-    ctx.fillRect(p.x * W, p.y * H, p.r, p.r * (2 + pct * pct * 26));
-  }
-}
-
 function renderSpeedLines(pct) {
   if (pct < 0.18) return;
   const a = (pct - 0.18) * 0.26;
@@ -554,7 +534,6 @@ function render(dt) {
   renderPlayer(zoom);
 
   renderSpeedLines(pct);
-  renderParticles(dt, pct);
 
   // 씬 색보정
   ctx.fillStyle = pal.overlay;
@@ -864,7 +843,7 @@ function buildMenu() {
         ${statRow("가속", "+" + accel.toFixed(1) + " km/h·s", accel / 8)}
         ${statRow("조향", type.handling.toFixed(1), type.handling / 4)}
         ${statRow("차폭", type.width + "", 1 - (type.width - 130) / 300)}
-        ${statRow("배율", "x" + type.scoreMul.toFixed(2), (type.scoreMul - 1) / 1.1)}
+        ${statRow("배율", "x" + type.scoreMul.toFixed(2), (type.scoreMul - 0.9) / 0.8)}
       </dl>`;
     const c = makeCanvas(104, 104);
     const cc = c.getContext("2d");
@@ -996,7 +975,6 @@ function startGame() {
   State.sceneHold = CFG.sceneStart;
   State.car.sprite = getCarSprite(State.car, State.car.colors.body);
   resetTraffic();
-  initParticles();
   menuEl.classList.remove("show");
   overEl.classList.remove("show");
   document.body.classList.add("playing");
@@ -1057,7 +1035,6 @@ function frame(now) {
 initScenery();
 resize();
 buildMenu();
-initParticles();
 State.car.sprite = getCarSprite(State.car, State.car.colors.body);
 toMenu();
 resetTraffic();

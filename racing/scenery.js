@@ -223,7 +223,6 @@ const BIOMES = [
     overlay: "rgba(255,138,90,0.10)",
     objects: ["building", "lamp", "tree"],
     o1: "#4a4468", o2: "#332e4c", o3: "#ffd58a", signText: "60",
-    particle: { color: "rgba(255,225,200,0.5)", n: 40 },
   },
   {
     id: "desert", name: "사막 고속도로",
@@ -233,7 +232,6 @@ const BIOMES = [
     overlay: "rgba(255,208,130,0.10)",
     objects: ["cactus", "rock", "sign"],
     o1: "#4e8a4a", o2: "#3a6b39", o3: "#ffe08a", signText: "SLOW",
-    particle: { color: "rgba(255,232,190,0.55)", n: 60 },
   },
   {
     id: "neon", name: "네온 나이트",
@@ -243,7 +241,6 @@ const BIOMES = [
     overlay: "rgba(20,10,60,0.34)",
     objects: ["building", "lamp", "sign"],
     o1: "#1b1f42", o2: "#12142c", o3: "#66f7ff", signText: "∞",
-    particle: { color: "rgba(140,240,255,0.6)", n: 70 },
   },
   {
     id: "snow", name: "설원 구간",
@@ -253,7 +250,6 @@ const BIOMES = [
     overlay: "rgba(180,215,255,0.14)",
     objects: ["snowpine", "rock", "bush"],
     o1: "#4a6f66", o2: "#33534c", o3: "#fff2c0", signText: "❄",
-    particle: { color: "rgba(255,255,255,0.92)", n: 110 },
   },
   {
     id: "coast", name: "해안 도로",
@@ -263,7 +259,6 @@ const BIOMES = [
     overlay: "rgba(120,215,255,0.10)",
     objects: ["palm", "rock", "bush"],
     o1: "#2f8f5e", o2: "#1f6b45", o3: "#ffe08a", signText: "80",
-    particle: { color: "rgba(255,255,255,0.45)", n: 45 },
   },
   {
     id: "forest", name: "황혼의 숲",
@@ -273,7 +268,6 @@ const BIOMES = [
     overlay: "rgba(255,120,60,0.14)",
     objects: ["pine", "tree", "bush"],
     o1: "#2f5a2c", o2: "#1e3a1e", o3: "#ffd58a", signText: "!",
-    particle: { color: "rgba(255,190,120,0.55)", n: 55 },
   },
   {
     id: "volcano", name: "화산 지대",
@@ -283,7 +277,6 @@ const BIOMES = [
     overlay: "rgba(255,80,20,0.16)",
     objects: ["rock", "sign", "lamp"],
     o1: "#4a2f2a", o2: "#33201d", o3: "#ff8a3d", signText: "▲",
-    particle: { color: "rgba(255,140,60,0.9)", n: 90 },
   },
 ];
 
