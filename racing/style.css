@@ -79,19 +79,39 @@ h2 { font-size: 13px; letter-spacing: .16em; color: #7d90b0; margin: 0 0 10px; t
 .cols { display: grid; grid-template-columns: 1.55fr 1fr; gap: 22px; }
 @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
 
-#car-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 10px;
-  max-height: 44dvh; overflow-y: auto; padding-right: 4px; }
+/* 랭킹 */
+.ranks { list-style: none; margin: 0 0 18px; padding: 0; display: grid; gap: 4px; }
+.ranks li {
+  display: grid; grid-template-columns: 20px 1fr auto auto 32px; align-items: center; gap: 8px;
+  padding: 6px 9px; border-radius: 8px; font-size: 12.5px; color: #b9c6da;
+  background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.07);
+  font-variant-numeric: tabular-nums;
+}
+.ranks li:nth-child(1) { border-color: rgba(255,210,63,.5); background: rgba(255,210,63,.10); }
+.ranks li:nth-child(2) { border-color: rgba(200,210,225,.35); }
+.ranks li:nth-child(3) { border-color: rgba(205,140,90,.35); }
+.ranks li.is-new { box-shadow: 0 0 0 1px #4be3a0 inset, 0 0 18px rgba(75,227,160,.3); }
+.ranks .rk { font-weight: 900; color: #7d90b0; text-align: center; }
+.ranks li:nth-child(1) .rk { color: #ffd23f; }
+.ranks .rs { font-weight: 800; color: #fff; font-size: 15px; }
+.ranks .rd { color: #cfdaea; }
+.ranks .rv { color: #8d9bb2; font-size: 11px; }
+.ranks time { color: #6f7c92; font-size: 11px; text-align: right; }
+.rank-empty { display: block !important; color: #7d8ba3; font-size: 12px; text-align: center; }
+.rank-badge { font-size: 15px; font-weight: 800; color: #8d9bb2; margin: 2px 0 8px; }
+.rank-badge.in { color: #4be3a0; text-shadow: 0 0 16px rgba(75,227,160,.55); }
+.over-h2 { text-align: left; }
+
 .car-card {
   text-align: left; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.10);
-  border-radius: 12px; padding: 10px; cursor: pointer; color: inherit; font: inherit; transition: .15s;
+  border-radius: 12px; padding: 12px; color: inherit; font: inherit;
+  display: grid; grid-template-columns: auto 1fr; gap: 14px; align-items: center;
 }
-.car-card:hover { background: rgba(120,170,255,.10); border-color: rgba(120,170,255,.4); }
-.car-card.selected { border-color: #4be3a0; background: rgba(75,227,160,.10); box-shadow: 0 0 0 1px #4be3a0 inset; }
 .car-thumb { display: flex; justify-content: center; }
-.car-thumb canvas { width: 122px; height: 122px; }
-.car-name { font-weight: 800; font-size: 15px; margin-top: 2px; display: flex; align-items: center; gap: 6px; }
+.car-thumb canvas { width: 96px; height: 96px; }
+.car-name { font-weight: 800; font-size: 16px; display: flex; align-items: center; gap: 6px; }
 .car-name .tag { font-size: 10px; font-weight: 600; color: #0b1020; background: #7fb2ff; padding: 2px 6px; border-radius: 999px; }
-.car-desc { font-size: 11px; color: #8d9bb2; margin: 3px 0 8px; line-height: 1.35; min-height: 30px; }
+.car-desc { font-size: 12px; color: #8d9bb2; margin: 4px 0 10px; line-height: 1.4; }
 .car-stats { margin: 0; display: grid; gap: 3px; }
 .stat { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 6px; font-size: 10px; color: #93a3bd; }
 .stat dt { margin: 0; } .stat dd { margin: 0; height: 5px; background: rgba(255,255,255,.12); border-radius: 3px; overflow: hidden; }
@@ -110,7 +130,10 @@ h2 { font-size: 13px; letter-spacing: .16em; color: #7d90b0; margin: 0 0 10px; t
 kbd { background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.2); border-radius: 5px; padding: 1px 6px; font-size: 11px; }
 .best { font-size: 12px; color: #7d8ba3; } .best b { color: #ffd23f; }
 
-#menu #btn-start { position: sticky; bottom: -6px; width: 100%; z-index: 2; }
+/* 메뉴 패널: 본문만 스크롤하고 시작 버튼은 아래에 고정 */
+#menu .panel { display: flex; flex-direction: column; overflow: hidden; }
+#menu .cols { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-right: 6px; }
+#menu #btn-start { width: 100%; flex: 0 0 auto; }
 .primary, .btn-row button, #btn-start {
   margin-top: 18px; padding: 13px 26px; font-size: 16px; font-weight: 800; border-radius: 10px; cursor: pointer;
   border: none; background: linear-gradient(90deg, #ff3b5c, #ff8a3d); color: #fff; letter-spacing: .04em;
@@ -124,3 +147,10 @@ kbd { background: rgba(255,255,255,.10); border: 1px solid rgba(255,255,255,.2);
 .result div { display: flex; justify-content: space-between; border-bottom: 1px dashed rgba(255,255,255,.12); padding-bottom: 5px; }
 .result dt { color: #8d9bb2; font-size: 13px; margin: 0; }
 .result dd { margin: 0; font-weight: 800; color: #fff; font-size: 15px; }
+
+/* 세로가 짧은 화면에서는 메뉴 헤더를 줄여 본문을 더 보여준다 */
+@media (max-height: 700px) {
+  #menu .panel { padding: 16px 20px 18px; }
+  #menu h1 { font-size: clamp(26px, 4.6vw, 38px); }
+  #menu .lead { font-size: 13px; margin-bottom: 12px; }
+}

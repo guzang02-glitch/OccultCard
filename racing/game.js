@@ -66,7 +66,7 @@ const laneCenter = (lane) => -1 + (lane + 0.5) * laneWidthFrac;
 // ---------------------------- 상태 ----------------------------------
 const State = {
   mode: "menu", // menu | playing | crashed
-  car: CAR_TYPES[0],
+  car: PLAYER_CAR,
   scroll: 0,          // 누적 주행 위치(기준 px) - 도로/지면/오브젝트 공통 좌표
   speed: 100,
   topSpeed: 100,
@@ -386,15 +386,19 @@ function crash() {
   State.mode = "crashed";
   State.crashTimer = 0;
   Sound.crash();
-  const dist = Math.floor(State.distance);
-  const score = Math.floor(State.score);
-  const best = loadBest();
-  if (dist > best.distance) best.distance = dist;
-  if (score > best.score) best.score = score;
-  saveBest(best);
-  State.bestDistance = best.distance;
-  State.bestScore = best.score;
-  showGameOver(dist, score);
+  const entry = {
+    score: Math.floor(State.score),
+    distance: Math.floor(State.distance),
+    topSpeed: Math.round(State.topSpeed),
+    dodge: State.nearMiss,
+    time: +State.elapsed.toFixed(1),
+    at: new Date().toISOString(),
+  };
+  const rank = submitRun(entry);
+  const ranks = loadRanks();
+  State.bestDistance = bestOf(ranks, "distance");
+  State.bestScore = bestOf(ranks, "score");
+  showGameOver(entry, rank, ranks);
 }
 
 // ---------------------------- 렌더링 --------------------------------
@@ -923,16 +927,36 @@ const Sound = {
 };
 
 // ---------------------------- 저장 ----------------------------------
-const BEST_KEY = "brakefail_best_v1";
-function loadBest() {
+// 주행이 끝나면 점수 기준 TOP 5 랭킹에 자동으로 등재된다
+const RANK_KEY = "brakefail_rank_v1";
+const RANK_SIZE = 5;
+
+function loadRanks() {
   try {
-    return Object.assign({ distance: 0, score: 0 }, JSON.parse(localStorage.getItem(BEST_KEY) || "{}"));
+    const a = JSON.parse(localStorage.getItem(RANK_KEY) || "[]");
+    return Array.isArray(a) ? a.slice(0, RANK_SIZE) : [];
   } catch (e) {
-    return { distance: 0, score: 0 };
+    return [];
   }
 }
-function saveBest(b) {
-  try { localStorage.setItem(BEST_KEY, JSON.stringify(b)); } catch (e) { /* 무시 */ }
+
+function saveRanks(list) {
+  try { localStorage.setItem(RANK_KEY, JSON.stringify(list.slice(0, RANK_SIZE))); } catch (e) { /* 무시 */ }
+}
+
+// 등재되면 순위(1~5), 못 들면 0
+function submitRun(entry) {
+  const list = loadRanks();
+  list.push(entry);
+  list.sort((a, b) => b.score - a.score);
+  const top = list.slice(0, RANK_SIZE);
+  saveRanks(top);
+  const idx = top.indexOf(entry);
+  return idx < 0 ? 0 : idx + 1;
+}
+
+function bestOf(ranks, key) {
+  return ranks.reduce((m, r) => Math.max(m, r[key] || 0), 0);
 }
 
 // ---------------------------- HUD / 화면 ----------------------------
@@ -949,17 +973,15 @@ const HUD = {
 
 const menuEl = document.getElementById("menu");
 const overEl = document.getElementById("gameover");
-const carListEl = document.getElementById("car-list");
 
 function buildMenu() {
-  carListEl.innerHTML = "";
-  CAR_TYPES.forEach((type) => {
-    type.sprite = getCarSprite(type, type.colors.body);
-    const el = document.createElement("button");
-    el.className = "car-card" + (type === State.car ? " selected" : "");
-    const accel = type.accel * CFG.baseAccel;
-    el.innerHTML = `
-      <div class="car-thumb"></div>
+  const type = State.car;
+  type.sprite = getCarSprite(type, type.colors.body);
+  const accel = type.accel * CFG.baseAccel;
+  const card = document.getElementById("car-info");
+  card.innerHTML = `
+    <div class="car-thumb"></div>
+    <div class="car-body">
       <div class="car-name">${type.name}<span class="tag">${type.tag}</span></div>
       <div class="car-desc">${type.desc}</div>
       <dl class="car-stats">
@@ -967,20 +989,13 @@ function buildMenu() {
         ${statRow("가속", "+" + accel.toFixed(1) + " km/h·s", accel / 8)}
         ${statRow("조향", type.handling.toFixed(1), type.handling / 4)}
         ${statRow("차폭", type.width + "", 1 - (type.width - 130) / 300)}
-        ${statRow("배율", "x" + type.scoreMul.toFixed(2), (type.scoreMul - 0.9) / 0.8)}
-      </dl>`;
-    const c = makeCanvas(140, 140);
-    const cc = c.getContext("2d");
-    const sh = 132, sw = sh / type.topAspect;
-    cc.drawImage(type.sprite, (140 - sw) / 2, 4, sw, sh);
-    el.querySelector(".car-thumb").appendChild(c);
-    el.addEventListener("click", () => {
-      State.car = type;
-      [...carListEl.children].forEach((n) => n.classList.remove("selected"));
-      el.classList.add("selected");
-    });
-    carListEl.appendChild(el);
-  });
+      </dl>
+    </div>`;
+  const c = makeCanvas(150, 150);
+  const cc = c.getContext("2d");
+  const sh = 142, sw = sh / type.topAspect;
+  cc.drawImage(type.sprite, (150 - sw) / 2, 4, sw, sh);
+  card.querySelector(".car-thumb").appendChild(c);
 
   // 차선 속도 표
   document.getElementById("lane-table").innerHTML = LANE_SPEEDS.map((s, i) =>
@@ -988,19 +1003,40 @@ function buildMenu() {
   ).join("");
 }
 
+// 랭킹 목록 그리기 (highlight: 방금 등재된 순위)
+function renderRanks(el, ranks, highlight) {
+  if (!ranks.length) {
+    el.innerHTML = `<li class="rank-empty">아직 기록이 없다. 첫 주행이 곧 1위.</li>`;
+    return;
+  }
+  el.innerHTML = ranks.map((r, i) => {
+    const d = new Date(r.at);
+    const when = isNaN(d) ? "" : `${d.getMonth() + 1}/${d.getDate()}`;
+    return `<li class="${i + 1 === highlight ? "is-new" : ""}">
+      <span class="rk">${i + 1}</span>
+      <span class="rs">${r.score.toLocaleString()}</span>
+      <span class="rd">${r.distance.toLocaleString()} m</span>
+      <span class="rv">${r.topSpeed} km/h</span>
+      <time>${when}</time>
+    </li>`;
+  }).join("");
+}
+
 function statRow(label, value, pct) {
   const p = Math.round(Util.limit(pct, 0.05, 1) * 100);
   return `<div class="stat"><dt>${label}</dt><dd><span style="width:${p}%"></span></dd><b>${value}</b></div>`;
 }
 
-function showGameOver(dist, score) {
-  document.getElementById("over-distance").textContent = dist.toLocaleString() + " m";
-  document.getElementById("over-score").textContent = score.toLocaleString();
-  document.getElementById("over-top").textContent = Math.round(State.topSpeed) + " km/h";
-  document.getElementById("over-near").textContent = State.nearMiss + " 회";
-  document.getElementById("over-time").textContent = State.elapsed.toFixed(1) + " 초";
-  document.getElementById("over-best").textContent =
-    `${State.bestDistance.toLocaleString()} m / ${State.bestScore.toLocaleString()} 점`;
+function showGameOver(entry, rank, ranks) {
+  document.getElementById("over-distance").textContent = entry.distance.toLocaleString() + " m";
+  document.getElementById("over-score").textContent = entry.score.toLocaleString();
+  document.getElementById("over-top").textContent = entry.topSpeed + " km/h";
+  document.getElementById("over-near").textContent = entry.dodge + " 회";
+  document.getElementById("over-time").textContent = entry.time.toFixed(1) + " 초";
+  const badge = document.getElementById("over-rank");
+  badge.textContent = rank ? (rank === 1 ? "신기록 1위!" : `랭킹 ${rank}위 등재`) : "랭킹 진입 실패";
+  badge.classList.toggle("in", !!rank);
+  renderRanks(document.getElementById("over-rank-list"), ranks, rank);
   setTimeout(() => overEl.classList.add("show"), 900);
 }
 
@@ -1090,9 +1126,9 @@ document.getElementById("btn-sound").addEventListener("click", (e) => {
 
 // ---------------------------- 게임 흐름 ------------------------------
 function startGame() {
-  const best = loadBest();
-  State.bestDistance = best.distance;
-  State.bestScore = best.score;
+  const ranks = loadRanks();
+  State.bestDistance = bestOf(ranks, "distance");
+  State.bestScore = bestOf(ranks, "score");
   State.mode = "playing";
   State.scroll = 0;
   State.elapsed = 0;
@@ -1123,9 +1159,7 @@ function toMenu() {
   overEl.classList.remove("show");
   document.body.classList.remove("playing");
   Sound.stop();
-  const best = loadBest();
-  document.getElementById("menu-best").textContent =
-    `${best.distance.toLocaleString()} m / ${best.score.toLocaleString()} 점`;
+  renderRanks(document.getElementById("rank-list"), loadRanks(), 0);
 }
 
 // ---------------------------- 루프 ----------------------------------

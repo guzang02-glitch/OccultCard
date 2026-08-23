@@ -38,31 +38,20 @@ function shade(hex, amount) {
 }
 
 // ---------------------------------------------------------------------
-// 플레이어가 선택하는 차량 (2종, 둘 다 빨강)
+// 플레이어 차량 - 빨간 오토바이 고정
 //  startSpeed : 시작 속도(km/h)      accel     : 초당 가속 배율
 //  handling   : 초당 차선 이동 수
 //  width      : 차폭(월드 단위, 도로 전체폭 4000 / 차선폭 444)
 //  topAspect  : 위에서 봤을 때 길이/폭 비율
 //  scoreMul   : 점수 배율
 // ---------------------------------------------------------------------
-const PLAYER_RED = { body: "#ff2f2f", glass: "#180f14" };
-
-const CAR_TYPES = [
-  {
-    id: "falcon", name: "팔콘 GT", tag: "스포츠카", kind: "sports",
-    desc: "차폭이 넓어 빠져나갈 틈이 좁다. 대신 점수 배율이 높다.",
-    startSpeed: 112, accel: 1.45, handling: 2.9,
-    width: 292, topAspect: 2.35, scoreMul: 1.5,
-    colors: PLAYER_RED,
-  },
-  {
-    id: "jet", name: "제트 R", tag: "오토바이", kind: "bike",
-    desc: "폭이 절반, 조향도 가장 빠르다. 가장 무난한 선택.",
-    startSpeed: 108, accel: 1.6, handling: 3.8,
-    width: 148, topAspect: 2.6, scoreMul: 1.0,
-    colors: PLAYER_RED,
-  },
-];
+const PLAYER_CAR = {
+  id: "jet", name: "제트 R", tag: "오토바이", kind: "bike",
+  desc: "폭이 절반, 조향은 가장 빠르다. 브레이크만 빠졌다.",
+  startSpeed: 108, accel: 1.6, handling: 3.8,
+  width: 148, topAspect: 2.6, scoreMul: 1.0,
+  colors: { body: "#ff2f2f", glass: "#180f14" },
+};
 
 // 도로 위 일반 차량 - 크기별로 실루엣이 모두 다르다 (색은 무작위)
 //  laneBias : -1(좌측 고속 차선 선호) ~ +1(우측 저속 차선 선호).

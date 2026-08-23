@@ -51,8 +51,10 @@
 
       <div class="cols">
         <section>
-          <h2>차량 선택</h2>
-          <div id="car-list"></div>
+          <h2>랭킹 TOP 5</h2>
+          <ol id="rank-list" class="ranks"></ol>
+          <h2>차량</h2>
+          <div id="car-info" class="car-card"></div>
         </section>
         <aside>
           <h2>차선별 흐름 속도</h2>
@@ -66,7 +68,6 @@
             <li>모바일: 화면 좌/우 터치</li>
             <li>우측 레이더는 화면 밖 먼 거리까지 보여준다</li>
           </ul>
-          <div class="best">최고 기록 <b id="menu-best">0 m / 0 점</b></div>
         </aside>
       </div>
 
@@ -78,6 +79,7 @@
   <div id="gameover" class="overlay">
     <div class="panel small">
       <h1 class="crash">CRASH</h1>
+      <div id="over-rank" class="rank-badge"></div>
       <dl class="result">
         <div><dt>주행 거리</dt><dd id="over-distance">0 m</dd></div>
         <div><dt>점수</dt><dd id="over-score">0</dd></div>
@@ -85,10 +87,11 @@
         <div><dt>아슬아슬 통과</dt><dd id="over-near">0 회</dd></div>
         <div><dt>생존 시간</dt><dd id="over-time">0 초</dd></div>
       </dl>
-      <div class="best">최고 기록 <b id="over-best">0 m</b></div>
+      <h2 class="over-h2">랭킹 TOP 5</h2>
+      <ol id="over-rank-list" class="ranks"></ol>
       <div class="btn-row">
         <button id="btn-retry" class="primary">다시 달리기</button>
-        <button id="btn-menu">차량 변경</button>
+        <button id="btn-menu">메뉴로</button>
       </div>
     </div>
   </div>
