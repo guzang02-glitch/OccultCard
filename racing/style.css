@@ -27,8 +27,6 @@ body:not(.playing) #hud { opacity: 0; }
 .hud-right { position: absolute; top: 14px; right: 16px; text-align: right; }
 #scene-name { font-size: 13px; letter-spacing: .12em; color: #cbd6ea; background: rgba(10,14,26,.55);
   padding: 5px 10px; border-radius: 999px; display: inline-block; margin-bottom: 8px; border: 1px solid rgba(255,255,255,.12); }
-#scene-name.pop { animation: pop .8s ease; }
-@keyframes pop { 0% { transform: scale(1.25); color: #fff; box-shadow: 0 0 22px rgba(120,220,255,.6); } 100% { transform: scale(1); } }
 #radar { border-radius: 8px; border: 1px solid rgba(255,255,255,.16); display: block; }
 @media (max-width: 620px) {
   #radar { width: 76px; height: 148px; }

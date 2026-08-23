@@ -36,16 +36,17 @@ const CFG = {
   aheadWin: 3.2,          // × 화면높이 : 트래픽 관리 범위(앞)
   behindWin: 1.2,         // × 화면높이 : 트래픽 관리 범위(뒤)
 
-  bandLen: 110,           // 지면 교차 밴드 길이
-  roadBandLen: 240,       // 노면 교차 밴드 길이
-  dashPeriod: 150,        // 차선 점선 주기
-  dashLen: 58,
+  // 눈이 피로하지 않게 노면 무늬를 아주 길게 잡는다 (깜빡임 최소화)
+  bandLen: 320,           // 지면 교차 밴드 길이
+  roadBandLen: 640,       // 노면 교차 밴드 길이
+  dashPeriod: 540,        // 차선 점선 주기
+  dashLen: 320,
 
-  sceneStart: 22,         // 첫 씬 유지 시간(초)
-  sceneMin: 7,            // 최소 씬 유지 시간(초)
-  sceneDecay: 0.9,        // 씬이 바뀔 때마다 유지 시간 x 0.9
-  sceneFade: 1.6,
 };
+
+// 배경은 하나로 고정한다. BIOMES 안의 다른 id 로 바꾸면 그 배경으로 달린다.
+const SCENE_ID = "dawn";
+let scene = null;
 
 const Util = {
   limit: (v, lo, hi) => Math.max(lo, Math.min(v, hi)),
@@ -77,7 +78,6 @@ const State = {
   nextObjS: 0,
   crashTimer: 0,
   flash: 0,
-  biomeA: 0, biomeB: 1, fade: 0, sceneTimer: 0, sceneHold: CFG.sceneStart,
   bestDistance: 0, bestScore: 0,
 };
 
@@ -284,28 +284,6 @@ function updateObjects(sTop, sBot) {
 }
 
 // ---------------------------- 업데이트 ------------------------------
-function updateScene(dt) {
-  State.sceneTimer += dt;
-  if (State.fade > 0) {
-    State.fade = Math.min(1, State.fade + dt / CFG.sceneFade);
-    if (State.fade >= 1) {
-      State.biomeA = State.biomeB;
-      State.fade = 0;
-    }
-  } else if (State.sceneTimer >= State.sceneHold) {
-    State.sceneTimer = 0;
-    State.sceneHold = Math.max(CFG.sceneMin, State.sceneHold * CFG.sceneDecay);
-    let next = State.biomeA;
-    while (next === State.biomeA) next = Util.randInt(0, BIOMES.length - 1);
-    State.biomeB = next;
-    State.fade = 0.001;
-    HUD.sceneName.textContent = BIOMES[next].name;
-    HUD.sceneName.classList.remove("pop");
-    void HUD.sceneName.offsetWidth;
-    HUD.sceneName.classList.add("pop");
-  }
-}
-
 function step(dt) {
   State.elapsed += dt;
 
@@ -324,7 +302,6 @@ function step(dt) {
   State.lane = Util.limit(Math.round((State.offsetX + 1) / laneWidthFrac - 0.5), 0, LANES - 1);
 
   updateTraffic(dt);
-  updateScene(dt);
 
   if (State.comboTimer > 0) {
     State.comboTimer -= dt;
@@ -409,7 +386,7 @@ function renderRoadLines(pal, zoom) {
   }
 
   // 양쪽 경계 스트립 (럼블)
-  const RP = P * 0.55;
+  const RP = P * 0.9;
   const w = lineW * 1.6;
   for (let s = Math.floor(sBot / RP) * RP; s < sTop; s += RP) {
     ctx.fillStyle = (Math.floor(s / RP) % 2 === 0) ? pal.rumble1 : pal.rumble2;
@@ -425,8 +402,8 @@ function renderRoadStreaks(zoom, pct) {
   if (pct < 0.2) return;
   const half = roadPxBase * zoom / 2;
   ctx.fillStyle = `rgba(255,255,255,${(pct - 0.2) * 0.16})`;
-  const n = 26;
-  const len = 40 + pct * 170;
+  const n = 16;
+  const len = 120 + pct * 420;
   for (let i = 0; i < n; i++) {
     const seed = (i * 9301 + 49297) % 233280 / 233280;
     const x = W / 2 - half + seed * half * 2;
@@ -436,16 +413,21 @@ function renderRoadStreaks(zoom, pct) {
 }
 
 function renderObjects(zoom, blurPx) {
-  const biome = State.fade > 0.5 ? BIOMES[State.biomeB] : BIOMES[State.biomeA];
-  const sprites = biome.objSprites;
+  const sprites = scene.objSprites;
   const half = roadPxBase * zoom / 2;
+  // 갓길 바깥으로 이만큼 떨어진 지점부터 그린다 (스프라이트의 안쪽 끝 기준)
+  const keepOut = half + half * 0.055 + 10;
   for (const o of State.objects) {
     const y = yOf(o.s, zoom);
     if (y < -260 || y > H + 260) continue;
     const sp = sprites[o.kind % sprites.length];
     const w = sp.worldW * unit * zoom * o.scale;
     const h = w * (sp.cv.height / sp.cv.width);
-    const x = W / 2 + o.side * (half + o.out * W) - w / 2;
+    // 안쪽 끝을 keepOut 밖에 고정하고, 남는 공간 안에서만 더 밀어낸다.
+    // 폭이 커서 공간이 부족하면 화면 밖으로 넘기고 도로는 건드리지 않는다
+    const room = Math.max(keepOut, W / 2 - w);
+    const off = Util.limit(keepOut + o.out * W, keepOut, room);
+    const x = o.side < 0 ? W / 2 - off - w : W / 2 + off;
     if (blurPx > 10) {
       ctx.globalAlpha = 0.14;
       ctx.drawImage(sp.cv, x, y - h / 2 - blurPx * 0.4, w, h);
@@ -513,9 +495,7 @@ function renderSpeedLines(pct) {
 }
 
 function render(dt) {
-  const pal = State.fade > 0
-    ? blendPalette(BIOMES[State.biomeA], BIOMES[State.biomeB], State.fade)
-    : BIOMES[State.biomeA];
+  const pal = scene;
   const zoom = zoomOf();
   const pct = speedPct();
   const scrollPx = scrollRate(State.speed) * zoom;   // 초당 화면 이동 px
@@ -593,12 +573,23 @@ function renderRadar() {
 }
 
 // ---------------------------- 사운드 --------------------------------
-// 엔진(기어/RPM) + 노면 럼블 + 바람 + 추월 휘익 소리
-const GEAR_TOPS = [95, 145, 205, 275, 355, 480];
+// 엔진음 없이 배경음(신스 루프)과 효과음(추월 / 콤보 / 충돌)만 사용한다
+const BPM = 132;
+const STEP = 60 / BPM / 4;      // 16분음표 길이(초)
+const STEPS = 64;               // 4마디 루프
+// A 마이너 진행: Am - F - C - G (A4 = 0 기준 반음 오프셋)
+const CHORDS = [
+  { bass: -24, arp: [0, 3, 7, 12] },
+  { bass: -28, arp: [0, 4, 7, 12] },
+  { bass: -21, arp: [0, 4, 7, 12] },
+  { bass: -26, arp: [0, 4, 7, 12] },
+];
+const BASS_STEPS = [0, 3, 6, 8, 11, 14];
+const pitch = (n) => 440 * Math.pow(2, n / 12);
 
 const Sound = {
-  ctx: null, on: true, ready: false,
-  gear: 0, rpm: 0, shift: 0, lastWhoosh: 0,
+  ctx: null, on: true, ready: false, playing: false,
+  step: 0, nextNote: 0, intensity: 0, lastWhoosh: 0,
 
   init() {
     if (this.ctx) return;
@@ -610,58 +601,46 @@ const Sound = {
     const master = ac.createGain();
     master.gain.value = 0;
     const comp = ac.createDynamicsCompressor();
-    comp.threshold.value = -12;
+    comp.threshold.value = -14;
     comp.ratio.value = 6;
     master.connect(comp).connect(ac.destination);
     this.master = master;
 
-    // --- 엔진: 톱니 2개(디튠) + 사각 서브 -> 로우패스
-    const eg = ac.createGain();
-    eg.gain.value = 0.0;
-    const lp = ac.createBiquadFilter();
-    lp.type = "lowpass";
-    lp.frequency.value = 600;
-    lp.Q.value = 6;
-    lp.connect(eg).connect(master);
-    this.engineGain = eg;
-    this.engineLp = lp;
+    this.music = ac.createGain();
+    this.music.gain.value = 0.55;
+    this.music.connect(master);
 
-    this.osc = [];
-    [["sawtooth", 0.5, 1], ["sawtooth", 0.34, 1.008], ["square", 0.30, 0.5]].forEach(([type, gain, mul]) => {
+    this.sfx = ac.createGain();
+    this.sfx.gain.value = 0.9;
+    this.sfx.connect(master);
+
+    // 아주 작은 엔진 험: 속도에 따라 음높이만 조금 올라간다
+    this.engine = ac.createGain();
+    this.engine.gain.value = 0;
+    const elp = ac.createBiquadFilter();
+    elp.type = "lowpass";
+    elp.frequency.value = 220;
+    elp.connect(this.engine);
+    this.engine.connect(master);
+    this.engineOsc = [];
+    [["sawtooth", 0.6, 1], ["sine", 0.5, 0.5]].forEach(([type, gain, mul]) => {
       const o = ac.createOscillator();
       o.type = type;
-      o.frequency.value = 60 * mul;
+      o.frequency.value = 44 * mul;
       const g = ac.createGain();
       g.gain.value = gain;
-      o.connect(g).connect(lp);
+      o.connect(g).connect(elp);
       o.start();
-      this.osc.push({ o, mul });
+      this.engineOsc.push({ o, mul });
     });
 
-    // --- 노이즈 소스 (노면 럼블 / 바람 공용)
+    // 퍼커션/효과음용 노이즈
     const len = ac.sampleRate * 2;
     const buf = ac.createBuffer(1, len, ac.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
     this.noiseBuf = buf;
 
-    const mkNoise = (filterType, freq, q) => {
-      const src = ac.createBufferSource();
-      src.buffer = buf;
-      src.loop = true;
-      const f = ac.createBiquadFilter();
-      f.type = filterType;
-      f.frequency.value = freq;
-      f.Q.value = q;
-      const g = ac.createGain();
-      g.gain.value = 0;
-      src.connect(f).connect(g).connect(master);
-      src.start();
-      return { f, g };
-    };
-    this.road = mkNoise("lowpass", 140, 1);     // 노면 럼블
-    this.wind = mkNoise("bandpass", 700, 0.7);  // 바람
-    this.hiss = mkNoise("highpass", 3000, 0.7); // 고속 쉬익
     this.ready = true;
   },
 
@@ -669,44 +648,131 @@ const Sound = {
     this.init();
     if (!this.ctx) return;
     if (this.ctx.state === "suspended") this.ctx.resume();
-    this.gear = 0; this.shift = 0;
-    this.master.gain.setTargetAtTime(this.on ? 0.55 : 0, this.ctx.currentTime, 0.25);
+    this.playing = true;
+    this.step = 0;
+    this.nextNote = this.ctx.currentTime + 0.12;
+    this.music.gain.setTargetAtTime(0.55, this.ctx.currentTime, 0.2);
+    this.master.gain.setTargetAtTime(this.on ? 0.6 : 0, this.ctx.currentTime, 0.2);
   },
 
   stop() {
+    this.playing = false;
     if (!this.ctx) return;
-    this.master.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
+    this.engine.gain.setTargetAtTime(0, this.ctx.currentTime, 0.2);
+    this.master.gain.setTargetAtTime(0, this.ctx.currentTime, 0.25);
   },
 
-  // 속도에 따라 기어를 올리며 RPM을 다시 떨어뜨린다 (변속감)
-  update(speed, pct, dt) {
-    if (!this.ready) return;
+  // 속도가 오르면 배경음의 필터/리듬과 엔진 험의 음높이가 조금 변한다
+  update(speed, pct) {
+    this.intensity = pct;
+    if (!this.ready || !this.playing) return;
     const t = this.ctx.currentTime;
-    let gear = 0;
-    while (gear < GEAR_TOPS.length - 1 && speed > GEAR_TOPS[gear]) gear++;
-    if (gear !== this.gear) { this.gear = gear; this.shift = 0.22; }
-    const lo = gear === 0 ? 55 : GEAR_TOPS[gear - 1];
-    const hi = GEAR_TOPS[gear];
-    this.rpm = Util.limit((speed - lo) / (hi - lo), 0, 1);
-    if (this.shift > 0) this.shift = Math.max(0, this.shift - dt);
-
-    const duck = this.shift > 0 ? 0.30 : 1;
-    const over = Math.max(0, speed - GEAR_TOPS[GEAR_TOPS.length - 1]);
-    const base = 46 + this.rpm * 132 + gear * 7 + Math.min(46, over * 0.09);
-    for (const { o, mul } of this.osc) o.frequency.setTargetAtTime(base * mul, t, 0.05);
-    this.engineLp.frequency.setTargetAtTime(380 + this.rpm * 2400 + pct * 1600, t, 0.06);
-    this.engineGain.gain.setTargetAtTime((0.17 + pct * 0.13) * duck, t, this.shift > 0 ? 0.02 : 0.08);
-
-    // 노면 럼블: 속도에 비례
-    this.road.f.frequency.setTargetAtTime(110 + speed * 0.55, t, 0.15);
-    this.road.g.gain.setTargetAtTime(0.05 + pct * 0.22, t, 0.15);
-    // 바람: 고속에서 급격히 커진다 (속도 체감의 핵심)
-    this.wind.f.frequency.setTargetAtTime(520 + Math.pow(pct, 1.2) * 3400, t, 0.2);
-    this.wind.g.gain.setTargetAtTime(Math.pow(pct, 1.7) * 0.55, t, 0.2);
-    this.hiss.g.gain.setTargetAtTime(Math.pow(pct, 3) * 0.30, t, 0.2);
+    for (const { o, mul } of this.engineOsc) {
+      o.frequency.setTargetAtTime((40 + speed * 0.05) * mul, t, 0.12);
+    }
+    this.engine.gain.setTargetAtTime(0.05 + pct * 0.025, t, 0.3);
+    if (this.nextNote < t) this.nextNote = t + 0.05;   // 탭 전환 등으로 밀렸을 때 재동기
+    while (this.nextNote < t + 0.15) {
+      this.scheduleStep(this.step, this.nextNote);
+      this.nextNote += STEP;
+      this.step = (this.step + 1) % STEPS;
+    }
   },
 
-  // 옆을 스쳐 지나갈 때 도플러풍 휘익
+  scheduleStep(i, t) {
+    const chord = CHORDS[Math.floor(i / 16) % CHORDS.length];
+    const beat = i % 16;
+    const k = this.intensity;
+
+    if (beat % 4 === 0) this.kick(t);
+    if (beat % 4 === 2) this.snare(t);
+    if (beat % 2 === 1 || k > 0.5) this.hat(t, beat % 4 === 3);
+    if (BASS_STEPS.includes(beat)) this.bass(t, chord.bass);
+    this.arp(t, chord.bass + 24 + chord.arp[i % chord.arp.length]);
+    if (k > 0.35 && beat % 2 === 0) this.arp(t, chord.bass + 36 + chord.arp[(i + 2) % chord.arp.length], 0.5);
+  },
+
+  kick(t) {
+    const ac = this.ctx;
+    const o = ac.createOscillator();
+    o.frequency.setValueAtTime(135, t);
+    o.frequency.exponentialRampToValueAtTime(46, t + 0.11);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.5, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.16);
+    o.connect(g).connect(this.music);
+    o.start(t);
+    o.stop(t + 0.18);
+  },
+
+  hat(t, open) {
+    const ac = this.ctx;
+    const src = ac.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = ac.createBiquadFilter();
+    f.type = "highpass";
+    f.frequency.value = 7000;
+    const g = ac.createGain();
+    const dur = open ? 0.09 : 0.035;
+    g.gain.setValueAtTime(0.09 + this.intensity * 0.05, t);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + dur);
+    src.connect(f).connect(g).connect(this.music);
+    src.start(t);
+    src.stop(t + dur + 0.02);
+  },
+
+  snare(t) {
+    const ac = this.ctx;
+    const src = ac.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = ac.createBiquadFilter();
+    f.type = "bandpass";
+    f.frequency.value = 1900;
+    f.Q.value = 0.8;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.14, t);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.1);
+    src.connect(f).connect(g).connect(this.music);
+    src.start(t);
+    src.stop(t + 0.12);
+  },
+
+  bass(t, note) {
+    const ac = this.ctx;
+    const o = ac.createOscillator();
+    o.type = "sawtooth";
+    o.frequency.value = pitch(note);
+    const f = ac.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 380 + this.intensity * 520;
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.22, t + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + 0.19);
+    o.connect(f).connect(g).connect(this.music);
+    o.start(t);
+    o.stop(t + 0.22);
+  },
+
+  arp(t, note, mul) {
+    const ac = this.ctx;
+    const o = ac.createOscillator();
+    o.type = "square";
+    o.frequency.value = pitch(note);
+    const f = ac.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.value = 1100 + this.intensity * 3200;
+    const g = ac.createGain();
+    const peak = 0.075 * (mul || 1);
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(peak, t + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0005, t + 0.13);
+    o.connect(f).connect(g).connect(this.music);
+    o.start(t);
+    o.stop(t + 0.15);
+  },
+
+  // 옆을 스쳐 지나갈 때 바람 소리
   whoosh(pan, power) {
     if (!this.ready || !this.on || this.ctx.currentTime - this.lastWhoosh < 0.07) return;
     this.lastWhoosh = this.ctx.currentTime;
@@ -720,7 +786,7 @@ const Sound = {
     f.frequency.exponentialRampToValueAtTime(420, t + dur);
     const g = ac.createGain();
     g.gain.setValueAtTime(0.0001, t);
-    g.gain.exponentialRampToValueAtTime(0.34 * power, t + dur * 0.3);
+    g.gain.exponentialRampToValueAtTime(0.3 * power, t + dur * 0.3);
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     let node = g;
     if (ac.createStereoPanner) {
@@ -730,7 +796,7 @@ const Sound = {
       node = pn;
     }
     src.connect(f).connect(g);
-    node.connect(this.master);
+    node.connect(this.sfx);
     src.start(t);
     src.stop(t + dur + 0.05);
   },
@@ -746,7 +812,7 @@ const Sound = {
     const g = ac.createGain();
     g.gain.setValueAtTime(0.16, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
-    o.connect(g).connect(this.master);
+    o.connect(g).connect(this.sfx);
     o.start(t);
     o.stop(t + 0.18);
   },
@@ -754,7 +820,8 @@ const Sound = {
   crash() {
     if (!this.ready) return;
     const ac = this.ctx, t = ac.currentTime;
-    // 금속 충격 + 파열음
+    this.playing = false;
+
     const src = ac.createBufferSource();
     src.buffer = this.noiseBuf;
     const f = ac.createBiquadFilter();
@@ -764,7 +831,7 @@ const Sound = {
     const g = ac.createGain();
     g.gain.setValueAtTime(0.75, t);
     g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
-    src.connect(f).connect(g).connect(this.master);
+    src.connect(f).connect(g).connect(this.sfx);
     src.start(t);
     src.stop(t + 0.95);
 
@@ -775,22 +842,19 @@ const Sound = {
     const og = ac.createGain();
     og.gain.setValueAtTime(0.4, t);
     og.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
-    o.connect(og).connect(this.master);
+    o.connect(og).connect(this.sfx);
     o.start(t);
     o.stop(t + 0.75);
 
-    // 엔진/바람은 급격히 죽인다
-    this.engineGain.gain.setTargetAtTime(0, t, 0.15);
-    this.wind.g.gain.setTargetAtTime(0, t, 0.2);
-    this.hiss.g.gain.setTargetAtTime(0, t, 0.2);
-    this.road.g.gain.setTargetAtTime(0, t, 0.2);
+    this.music.gain.setTargetAtTime(0, t, 0.2);   // 배경음과 엔진 험은 끊는다
+    this.engine.gain.setTargetAtTime(0, t, 0.15);
   },
 
   toggle() {
     this.on = !this.on;
     if (this.ctx) {
       this.master.gain.setTargetAtTime(
-        this.on && State.mode === "playing" ? 0.55 : 0, this.ctx.currentTime, 0.1);
+        this.on && State.mode === "playing" ? 0.6 : 0, this.ctx.currentTime, 0.1);
     }
     return this.on;
   },
@@ -968,17 +1032,11 @@ function startGame() {
   State.flash = 0;
   State.objects = [];
   State.nextObjS = -H;
-  State.biomeA = Util.randInt(0, BIOMES.length - 1);
-  State.biomeB = State.biomeA;
-  State.fade = 0;
-  State.sceneTimer = 0;
-  State.sceneHold = CFG.sceneStart;
   State.car.sprite = getCarSprite(State.car, State.car.colors.body);
   resetTraffic();
   menuEl.classList.remove("show");
   overEl.classList.remove("show");
   document.body.classList.add("playing");
-  HUD.sceneName.textContent = BIOMES[State.biomeA].name;
   brakeFail();
   Sound.start();
 }
@@ -1014,7 +1072,7 @@ function frame(now) {
       if (State.mode !== "playing") break;
     }
     applyCarFollowing(dt);
-    Sound.update(State.speed, speedPct(), dt);
+    Sound.update(State.speed, speedPct());
   } else if (State.mode === "crashed") {
     State.crashTimer += dt;
   } else {
@@ -1033,6 +1091,8 @@ function frame(now) {
 
 // ---------------------------- 시작 ----------------------------------
 initScenery();
+scene = BIOMES.find((b) => b.id === SCENE_ID) || BIOMES[0];
+HUD.sceneName.textContent = scene.name;
 resize();
 buildMenu();
 State.car.sprite = getCarSprite(State.car, State.car.colors.body);

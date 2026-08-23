@@ -285,22 +285,3 @@ function initScenery() {
     b.objSprites = b.objects.map((k) => OBJ_GENS[k](b));
   });
 }
-
-// 색상 보간 (씬 전환 크로스페이드) --------------------------------------
-function hexToRgb(h) {
-  const n = parseInt(h.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-function lerpHex(a, b, t) {
-  const A = hexToRgb(a), B = hexToRgb(b);
-  return `rgb(${Math.round(A[0] + (B[0] - A[0]) * t)},${Math.round(A[1] + (B[1] - A[1]) * t)},${Math.round(A[2] + (B[2] - A[2]) * t)})`;
-}
-
-const PALETTE_KEYS = ["ground1", "ground2", "detail", "road1", "road2", "shoulder", "rumble1", "rumble2", "lane"];
-
-function blendPalette(a, b, t) {
-  const out = {};
-  for (const k of PALETTE_KEYS) out[k] = t <= 0 ? a[k] : lerpHex(a[k], b[k], t);
-  out.overlay = t < 0.5 ? a.overlay : b.overlay;
-  return out;
-}
