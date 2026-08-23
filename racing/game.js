@@ -16,14 +16,12 @@ const CFG = {
   roadMaxPx: 600,
   playerYRatio: 0.78,     // 플레이어 차량의 화면 세로 위치
 
-  // 노면 스크롤: 100km/h 기준값 x (speed/100)^scrollExp
-  // 지수를 1보다 크게 둬서 저속과 고속의 체감 차이를 크게 벌린다
-  scrollK: 0.0024,        // × 화면높이 : 100km/h 에서의 초당 스크롤
-  scrollExp: 1.72,
+  // 노면 스크롤은 속도에 정직하게 비례한다 (100km/h 당 이만큼)
+  scrollK: 0.0032,        // × 화면높이 : 100km/h 에서의 초당 스크롤
   relK: 0.0014,           // × 화면높이 : 트래픽 상대 이동(회피 난이도)
 
   baseAccel: 4.0,         // 초당 가속(km/h) × 차량 accel 배율
-  maxSpeed: 480,
+  visRef: 480,            // 시각/청각 효과가 최대에 도달하는 기준 속도 (속도 자체는 무제한)
   zoomMin: 0.66,          // 고속일수록 축소해서 앞을 더 보여준다
 
   // 충돌 판정은 넉넉하게 (실제 그림보다 작은 히트박스)
@@ -78,7 +76,6 @@ const State = {
   cars: [],
   objects: [],
   nextObjS: 0,
-  shake: 0,
   crashTimer: 0,
   flash: 0,
   biomeA: 0, biomeB: 1, fade: 0, sceneTimer: 0, sceneHold: CFG.sceneStart,
@@ -112,15 +109,18 @@ function resize() {
 window.addEventListener("resize", resize);
 
 function speedPct() {
-  return Util.limit((State.speed - 80) / (CFG.maxSpeed - 80), 0, 1);
+  return Util.limit((State.speed - 80) / (CFG.visRef - 80), 0, 1);
 }
 // 속도에 따른 축소율 (빠를수록 멀리 본다 = 고속에서도 피할 수 있다)
+// 최고 속도가 없으므로 기준 속도를 넘어서도 아주 조금씩 계속 축소된다
 function zoomOf() {
-  return 1 - (1 - CFG.zoomMin) * Math.pow(speedPct(), 0.85);
+  const z = 1 - (1 - CFG.zoomMin) * Math.pow(speedPct(), 0.85);
+  if (State.speed <= CFG.visRef) return z;
+  return z * Math.max(0.72, Math.pow(CFG.visRef / State.speed, 0.3));
 }
-// 초당 노면 스크롤량(기준 px) - 속도에 비선형으로 반응한다
+// 초당 노면 스크롤량(기준 px) - 속도에 정비례
 function scrollRate(speed) {
-  return H * CFG.scrollK * 100 * Math.pow(speed / 100, CFG.scrollExp);
+  return H * CFG.scrollK * speed;
 }
 // 주행 위치 s -> 화면 y
 function yOf(s, zoom) {
@@ -337,8 +337,8 @@ function updateScene(dt) {
 function step(dt) {
   State.elapsed += dt;
 
-  // 브레이크 고장: 속도는 오직 올라가기만 한다
-  State.speed = Math.min(CFG.maxSpeed, State.car.startSpeed + State.car.accel * CFG.baseAccel * State.elapsed);
+  // 브레이크 고장: 속도는 오직 올라가기만 한다 (상한 없음)
+  State.speed = State.car.startSpeed + State.car.accel * CFG.baseAccel * State.elapsed;
   State.topSpeed = Math.max(State.topSpeed, State.speed);
 
   State.scroll += scrollRate(State.speed) * dt;
@@ -365,7 +365,6 @@ function step(dt) {
 
 function crash() {
   State.mode = "crashed";
-  State.shake = 1;
   State.crashTimer = 0;
   Sound.crash();
   const dist = Math.floor(State.distance);
@@ -559,7 +558,7 @@ function renderParticles(dt, pct) {
 
 function renderSpeedLines(pct) {
   if (pct < 0.18) return;
-  const a = (pct - 0.18) * 0.55;
+  const a = (pct - 0.18) * 0.26;
   ctx.fillStyle = `rgba(255,255,255,${a})`;
   const n = 18;
   for (let i = 0; i < n; i++) {
@@ -580,11 +579,6 @@ function render(dt) {
   const scrollPx = scrollRate(State.speed) * zoom;   // 초당 화면 이동 px
 
   ctx.save();
-  if (State.shake > 0.001) {
-    const s = State.shake * 16;
-    ctx.translate((Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
-  }
-
   renderGroundAndRoad(pal, zoom);
   renderRoadLines(pal, zoom);
   renderRoadStreaks(zoom, pct);
@@ -756,7 +750,8 @@ const Sound = {
     if (this.shift > 0) this.shift = Math.max(0, this.shift - dt);
 
     const duck = this.shift > 0 ? 0.30 : 1;
-    const base = 46 + this.rpm * 132 + gear * 7;
+    const over = Math.max(0, speed - GEAR_TOPS[GEAR_TOPS.length - 1]);
+    const base = 46 + this.rpm * 132 + gear * 7 + Math.min(46, over * 0.09);
     for (const { o, mul } of this.osc) o.frequency.setTargetAtTime(base * mul, t, 0.05);
     this.engineLp.frequency.setTargetAtTime(380 + this.rpm * 2400 + pct * 1600, t, 0.06);
     this.engineGain.gain.setTargetAtTime((0.17 + pct * 0.13) * duck, t, this.shift > 0 ? 0.02 : 0.08);
@@ -950,7 +945,7 @@ function updateHUD() {
   HUD.best.textContent = State.bestDistance.toLocaleString();
   HUD.lane.textContent = State.lane + 1;
   HUD.laneSpeed.textContent = LANE_SPEEDS[State.lane];
-  HUD.gauge.style.width = Util.limit((State.speed / CFG.maxSpeed) * 100, 0, 100) + "%";
+  HUD.gauge.style.width = Util.limit((State.speed / CFG.visRef) * 100, 0, 100) + "%";
   if (State.combo > 1) {
     HUD.combo.textContent = `아슬아슬 x${State.combo}`;
     HUD.combo.classList.add("show");
@@ -1028,7 +1023,6 @@ function startGame() {
   State.topSpeed = State.car.startSpeed;
   State.lane = State.targetLane = 6;   // 7차선(흐름 100km/h)에서 출발
   State.offsetX = laneCenter(State.lane);
-  State.shake = 0;
   State.crashTimer = 0;
   State.flash = 0;
   State.objects = [];
@@ -1081,10 +1075,8 @@ function frame(now) {
     }
     applyCarFollowing(dt);
     Sound.update(State.speed, speedPct(), dt);
-    State.shake = Util.limit((State.speed - 190) / 320, 0, 1) * 0.8;
   } else if (State.mode === "crashed") {
     State.crashTimer += dt;
-    State.shake = Math.max(0, State.shake - dt * 1.2);
   } else {
     // 메뉴에서도 배경이 천천히 흐른다
     State.scroll += 60 * dt;
