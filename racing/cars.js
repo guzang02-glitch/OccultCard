@@ -40,7 +40,7 @@ function shade(hex, amount) {
 // ---------------------------------------------------------------------
 // 차량 타입 (플레이어 선택 + 트래픽 공용)
 //  startSpeed : 시작 속도(km/h)      accel     : 초당 가속(km/h)
-//  handling   : 초당 차선 이동 수     grip      : 커브 저항
+//  handling   : 초당 차선 이동 수
 //  width      : 차폭(월드 단위, 도로 전체폭 4000 / 차선폭 444)
 //  topAspect  : 위에서 봤을 때 길이/폭 비율
 //  scoreMul   : 점수 배율 (느리고 둔한 차일수록 보상이 크다)
@@ -49,56 +49,56 @@ const CAR_TYPES = [
   {
     id: "kei", name: "코코 K", tag: "경차", kind: "car",
     desc: "가볍고 좁다. 틈새를 파고드는 생존형.",
-    startSpeed: 95, accel: 0.9, handling: 3.1, grip: 1.15,
+    startSpeed: 95, accel: 0.9, handling: 3.1,
     width: 248, topAspect: 1.95, scoreMul: 1.05,
     colors: { body: "#63d2ff", glass: "#12283f" },
   },
   {
     id: "sedan", name: "노바 S", tag: "세단", kind: "car",
     desc: "무난한 기본기. 처음이라면 이 차.",
-    startSpeed: 100, accel: 1.0, handling: 2.5, grip: 1.0,
+    startSpeed: 100, accel: 1.0, handling: 2.5,
     width: 286, topAspect: 2.25, scoreMul: 1.15,
     colors: { body: "#e8eaee", glass: "#16283c" },
   },
   {
     id: "sports", name: "팔콘 GT", tag: "스포츠", kind: "sports",
     desc: "낮고 빠르다. 가속이 붙으면 곧 지옥.",
-    startSpeed: 112, accel: 1.45, handling: 2.9, grip: 1.1,
+    startSpeed: 112, accel: 1.45, handling: 2.9,
     width: 292, topAspect: 2.35, scoreMul: 1.35,
     colors: { body: "#ff3b3b", glass: "#160f1c" },
   },
   {
     id: "muscle", name: "브루트 V8", tag: "머슬", kind: "sports",
     desc: "묵직한 가속, 굼뜬 핸들. 배짱이 필요.",
-    startSpeed: 105, accel: 1.25, handling: 1.9, grip: 0.85,
+    startSpeed: 105, accel: 1.25, handling: 1.9,
     width: 322, topAspect: 2.3, scoreMul: 1.4,
     colors: { body: "#ff9f1c", glass: "#1a1410" },
   },
   {
     id: "bike", name: "제트 R", tag: "바이크", kind: "bike",
     desc: "폭이 절반. 대신 실수 한 번이면 끝.",
-    startSpeed: 108, accel: 1.6, handling: 3.8, grip: 0.9,
+    startSpeed: 108, accel: 1.6, handling: 3.8,
     width: 148, topAspect: 2.6, scoreMul: 1.7,
     colors: { body: "#7cff6b", glass: "#101a12" },
   },
   {
     id: "van", name: "캐리어 밴", tag: "밴", kind: "van",
     desc: "덩치가 크고 굼뜨다. 점수 보상은 두둑.",
-    startSpeed: 92, accel: 0.8, handling: 1.7, grip: 1.0,
+    startSpeed: 92, accel: 0.8, handling: 1.7,
     width: 352, topAspect: 2.35, scoreMul: 1.6,
     colors: { body: "#4dd0a7", glass: "#12222b" },
   },
   {
     id: "truck", name: "타이탄 T", tag: "트럭", kind: "truck",
     desc: "차선 하나를 거의 다 먹는다. 최고 배율.",
-    startSpeed: 86, accel: 0.62, handling: 1.25, grip: 1.2,
+    startSpeed: 86, accel: 0.62, handling: 1.25,
     width: 392, topAspect: 3.1, scoreMul: 2.0,
     colors: { body: "#d94f6a", glass: "#101820" },
   },
   {
     id: "hyper", name: "하이퍼 X", tag: "하이퍼카", kind: "sports",
     desc: "시작부터 미쳐 있다. 가속이 폭력적.",
-    startSpeed: 120, accel: 1.95, handling: 3.0, grip: 1.05,
+    startSpeed: 120, accel: 1.95, handling: 3.0,
     width: 300, topAspect: 2.4, scoreMul: 1.5,
     colors: { body: "#b06bff", glass: "#12091f" },
   },

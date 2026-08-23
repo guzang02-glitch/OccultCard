@@ -1,9 +1,8 @@
 // =====================================================================
 // BRAKE FAILURE - 브레이크가 고장난 자동 가속 레이싱 (탑다운)
-//  - 속도는 초당 +1km/h 로 계속 올라가며 절대 줄지 않는다
-//  - 9차선 도로. 왼쪽 차선일수록 주행 차량이 빠르다
+//  - 속도는 계속 올라가며 절대 줄지 않는다
+//  - 9차선 직선 도로. 왼쪽 차선일수록 주행 차량이 빠르다
 //  - 위에서 내려다보는 시점으로 회피에만 집중한다
-//  - 도로는 끊기지 않고 무한히 이어지며 완만하게 굽이친다
 // =====================================================================
 
 // ---------------------------- 설정 ----------------------------------
@@ -17,13 +16,15 @@ const CFG = {
   roadMaxPx: 600,
   playerYRatio: 0.78,     // 플레이어 차량의 화면 세로 위치
 
-  // 스크롤 계수: 화면 높이 1px 기준, km/h 당 초당 이동량
-  scrollK: 0.0027,        // 노면/지면/도로변 (절대 속도감)
-  relK: 0.0014,           // 트래픽 상대 이동 (회피 난이도)
+  // 노면 스크롤: 100km/h 기준값 x (speed/100)^scrollExp
+  // 지수를 1보다 크게 둬서 저속과 고속의 체감 차이를 크게 벌린다
+  scrollK: 0.0024,        // × 화면높이 : 100km/h 에서의 초당 스크롤
+  scrollExp: 1.72,
+  relK: 0.0014,           // × 화면높이 : 트래픽 상대 이동(회피 난이도)
 
-  baseAccel: 1.0,         // 초당 +1 km/h (차량 accel 배율 적용)
-  maxSpeed: 420,
-  zoomMin: 0.78,          // 고속일수록 축소해서 앞을 더 보여준다
+  baseAccel: 4.0,         // 초당 가속(km/h) × 차량 accel 배율
+  maxSpeed: 480,
+  zoomMin: 0.66,          // 고속일수록 축소해서 앞을 더 보여준다
 
   // 충돌 판정은 넉넉하게 (실제 그림보다 작은 히트박스)
   hitX: 0.60,
@@ -38,11 +39,10 @@ const CFG = {
   aheadWin: 2.3,          // × 화면높이 : 트래픽 관리 범위(앞)
   behindWin: 1.2,         // × 화면높이 : 트래픽 관리 범위(뒤)
 
-  bandLen: 130,           // 지면 교차 밴드 길이
-  roadBandLen: 260,       // 노면 교차 밴드 길이
+  bandLen: 110,           // 지면 교차 밴드 길이
+  roadBandLen: 240,       // 노면 교차 밴드 길이
   dashPeriod: 150,        // 차선 점선 주기
   dashLen: 58,
-  centrifugal: 0.55,      // 커브에서 바깥으로 밀리는 정도
 
   sceneStart: 22,         // 첫 씬 유지 시간(초)
   sceneMin: 7,            // 최소 씬 유지 시간(초)
@@ -92,7 +92,6 @@ let W = 960, H = 540;
 let playerY = 420;      // 플레이어 화면 y
 let roadPxBase = 600;   // zoom 1 기준 도로 폭(px)
 let unit = 0.15;        // 월드 단위 -> 기준 px
-let swayAmp = 100;      // 도로가 좌우로 굽이치는 폭(px)
 let AHEAD = 1400, BEHIND = 700;
 
 function resize() {
@@ -107,27 +106,21 @@ function resize() {
   playerY = Math.round(H * CFG.playerYRatio);
   roadPxBase = Math.min(W * CFG.roadRatio, CFG.roadMaxPx);
   unit = roadPxBase / CFG.roadUnits;
-  swayAmp = Math.min((W - roadPxBase) / 2 * 0.62, W * 0.16);
   AHEAD = H * CFG.aheadWin;
   BEHIND = H * CFG.behindWin;
 }
 window.addEventListener("resize", resize);
 
-// 속도에 따른 축소율 (빠를수록 멀리 본다)
-function zoomOf() {
-  const pct = Util.limit((State.speed - 80) / (CFG.maxSpeed - 80), 0, 1);
-  return 1 - (1 - CFG.zoomMin) * pct;
-}
 function speedPct() {
   return Util.limit((State.speed - 80) / (CFG.maxSpeed - 80), 0, 1);
 }
-
-// 도로 중심선: 주행 위치 s(기준 px)에서의 좌우 오프셋
-function curveX(s) {
-  return swayAmp * (Math.sin(s / 1500) * 0.62 + Math.sin(s / 730 + 2.1) * 0.38);
+// 속도에 따른 축소율 (빠를수록 멀리 본다 = 고속에서도 피할 수 있다)
+function zoomOf() {
+  return 1 - (1 - CFG.zoomMin) * Math.pow(speedPct(), 0.85);
 }
-function curveSlope(s) {
-  return (curveX(s + 60) - curveX(s - 60)) / 120;
+// 초당 노면 스크롤량(기준 px) - 속도에 비선형으로 반응한다
+function scrollRate(speed) {
+  return H * CFG.scrollK * 100 * Math.pow(speed / 100, CFG.scrollExp);
 }
 // 주행 위치 s -> 화면 y
 function yOf(s, zoom) {
@@ -155,7 +148,6 @@ function laneOccupied(lane, rel, gap, ignore) {
 function spawnCar(recycled, scatter) {
   const type = TRAFFIC_TYPES[Util.randInt(0, TRAFFIC_TYPES.length - 1)];
   const color = TRAFFIC_COLORS[Util.randInt(0, TRAFFIC_COLORS.length - 1)];
-  // 느린 차선일수록 트래픽이 조금 더 많다
   let lane = 0;
   for (let tries = 0; tries < 8; tries++) {
     lane = Util.randInt(0, LANES - 1);
@@ -240,15 +232,21 @@ function updateTraffic(dt) {
       continue;
     }
 
-    // 아슬아슬 통과(니어미스): 옆을 스쳐 지나가는 순간
+    // 스쳐 지나가는 순간: 바람소리 + 아슬아슬 판정
     if (!car.scored && Math.sign(car.rel) !== Math.sign(car.prevRel)) {
       const gapPx = Math.abs(car.offX - State.offsetX) * roadPxBase / 2;
-      if (gapPx < (carW(car.type) + carW(State.car)) / 2 * 2.1) {
+      const near = (carW(car.type) + carW(State.car)) / 2;
+      if (gapPx < near * 5) {
+        Sound.whoosh((car.offX - State.offsetX) * 2, Util.limit(1 - gapPx / (near * 5), 0.15, 1)
+          * Util.limit(Math.abs(car.speed - State.speed) / 120, 0.2, 1));
+      }
+      if (gapPx < near * 2.1) {
         State.nearMiss++;
         State.combo++;
         State.comboTimer = 2.6;
         State.score += 40 * Math.min(State.combo, 10) * State.car.scoreMul;
         State.flash = Math.min(1, State.flash + 0.3);
+        Sound.blip(Math.min(State.combo, 8));
         car.scored = true;
       }
     }
@@ -289,8 +287,7 @@ function checkCollision() {
   const pW = carW(State.car) * CFG.hitX;
   const pL = carL(State.car) * CFG.hitY;
   for (const car of State.cars) {
-    const dz = Math.abs(car.rel);
-    if (dz > (pL + carL(car.type) * CFG.hitY) / 2) continue;
+    if (Math.abs(car.rel) > (pL + carL(car.type) * CFG.hitY) / 2) continue;
     const dx = Math.abs(car.offX - State.offsetX) * roadPxBase / 2;
     if (dx < (pW + carW(car.type) * CFG.hitX) / 2) return car;
   }
@@ -307,7 +304,7 @@ function updateObjects(sTop, sBot) {
       out: 0.04 + Math.random() * 0.17,   // 도로 가장자리에서 떨어진 정도(화면폭 비율)
       scale: 0.75 + Math.random() * 0.6,
     });
-    State.nextObjS += 80 + Math.random() * 240;
+    State.nextObjS += 60 + Math.random() * 200;
   }
   if (State.objects.length && State.objects[0].s < sBot - 400) {
     State.objects = State.objects.filter((o) => o.s >= sBot - 400);
@@ -344,21 +341,15 @@ function step(dt) {
   State.speed = Math.min(CFG.maxSpeed, State.car.startSpeed + State.car.accel * CFG.baseAccel * State.elapsed);
   State.topSpeed = Math.max(State.topSpeed, State.speed);
 
-  State.scroll += State.speed * H * CFG.scrollK * dt;
+  State.scroll += scrollRate(State.speed) * dt;
   State.distance += State.speed * dt / 3.6;
 
   // 차선 이동
   const target = laneCenter(State.targetLane);
-  const step2 = State.car.handling * laneWidthFrac * dt;
-  if (Math.abs(target - State.offsetX) <= step2) State.offsetX = target;
-  else State.offsetX += Math.sign(target - State.offsetX) * step2;
+  const stepX = State.car.handling * laneWidthFrac * dt;
+  if (Math.abs(target - State.offsetX) <= stepX) State.offsetX = target;
+  else State.offsetX += Math.sign(target - State.offsetX) * stepX;
   State.lane = Util.limit(Math.round((State.offsetX + 1) / laneWidthFrac - 0.5), 0, LANES - 1);
-
-  // 커브 원심력 (그립이 낮은 차는 더 밀린다)
-  const slope = curveSlope(State.scroll);
-  const spd = State.speed / 200;
-  State.offsetX -= slope * spd * spd * CFG.centrifugal * dt / State.car.grip;
-  State.offsetX = Util.limit(State.offsetX, -1 + laneWidthFrac * 0.42, 1 - laneWidthFrac * 0.42);
 
   updateTraffic(dt);
   updateScene(dt);
@@ -389,49 +380,48 @@ function crash() {
 }
 
 // ---------------------------- 렌더링 --------------------------------
-function quad(x1, y1, x2, y2, x3, y3, x4, y4, color) {
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.moveTo(x1, y1);
-  ctx.lineTo(x2, y2);
-  ctx.lineTo(x3, y3);
-  ctx.lineTo(x4, y4);
-  ctx.closePath();
-  ctx.fill();
-}
-
-const ROW = 12;
+const ROW = 14;
 
 function renderGroundAndRoad(pal, zoom) {
+  const stretch = 1 + speedPct() * 0.9;   // 고속에서 밴드를 길게 늘여 깜빡임을 줄인다
+  const bandLen = CFG.bandLen * stretch;
+  const roadBandLen = CFG.roadBandLen * stretch;
   const half = roadPxBase * zoom / 2;
+  const left = W / 2 - half, right = W / 2 + half;
   const shoulder = half * 0.055;
 
   ctx.fillStyle = pal.ground1;
   ctx.fillRect(0, 0, W, H);
 
-  for (let y = -ROW; y < H + ROW; y += ROW) {
-    const sA = State.scroll + (playerY - y) / zoom;
-    const sB = State.scroll + (playerY - (y + ROW)) / zoom;
-    const sMid = (sA + sB) / 2;
-    const cA = W / 2 + curveX(sA);
-    const cB = W / 2 + curveX(sB);
+  // 지면 교차 밴드 (스크롤 감각의 핵심)
+  const bandPx = bandLen * zoom;
+  const sBot = State.scroll + (playerY - H) / zoom;
+  const bandP2 = bandLen * 2;
+  ctx.fillStyle = pal.ground2;
+  for (let s = Math.floor(sBot / bandP2) * bandP2; yOf(s, zoom) > -bandPx; s += bandP2) {
+    const y = yOf(s, zoom);
+    ctx.fillRect(0, y - bandPx, W, bandPx);
+  }
 
-    // 지면 교차 밴드 (스크롤 감각)
-    if (Math.floor(sMid / CFG.bandLen) % 2 === 0) {
-      ctx.fillStyle = pal.ground2;
-      ctx.fillRect(0, y, W, ROW + 1);
-    }
-    // 갓길
-    quad(cA - half - shoulder, y, cA - half, y, cB - half, y + ROW, cB - half - shoulder, y + ROW, pal.shoulder);
-    quad(cA + half, y, cA + half + shoulder, y, cB + half + shoulder, y + ROW, cB + half, y + ROW, pal.shoulder);
-    // 노면
-    quad(cA - half, y, cA + half, y, cB + half, y + ROW, cB - half, y + ROW,
-      Math.floor(sMid / CFG.roadBandLen) % 2 === 0 ? pal.road1 : pal.road2);
+  // 갓길
+  ctx.fillStyle = pal.shoulder;
+  ctx.fillRect(left - shoulder, 0, shoulder, H);
+  ctx.fillRect(right, 0, shoulder, H);
+
+  // 노면
+  ctx.fillStyle = pal.road1;
+  ctx.fillRect(left, 0, half * 2, H);
+  ctx.fillStyle = pal.road2;
+  const rbPx = roadBandLen * zoom;
+  const roadP2 = roadBandLen * 2;
+  for (let s = Math.floor(sBot / roadP2) * roadP2; yOf(s, zoom) > -rbPx; s += roadP2) {
+    ctx.fillRect(left, yOf(s, zoom) - rbPx, half * 2, rbPx);
   }
 }
 
 function renderRoadLines(pal, zoom) {
   const half = roadPxBase * zoom / 2;
+  const left = W / 2 - half, right = W / 2 + half;
   const sBot = State.scroll + (playerY - (H + 40)) / zoom;
   const sTop = State.scroll + (playerY + 40) / zoom;
   const lineW = Math.max(1.6, roadPxBase * zoom * 0.0055);
@@ -440,24 +430,37 @@ function renderRoadLines(pal, zoom) {
   // 차선 점선
   ctx.fillStyle = pal.lane;
   for (let s = Math.floor(sBot / P) * P; s < sTop; s += P) {
-    const y1 = yOf(s, zoom), y2 = yOf(s + D, zoom);
-    const c1 = W / 2 + curveX(s), c2 = W / 2 + curveX(s + D);
+    const y = yOf(s + D, zoom);
+    const h = D * zoom;
     for (let i = 1; i < LANES; i++) {
-      const off = (-1 + i * laneWidthFrac) * half;
-      quad(c1 + off - lineW / 2, y1, c1 + off + lineW / 2, y1,
-        c2 + off + lineW / 2, y2, c2 + off - lineW / 2, y2, pal.lane);
+      ctx.fillRect(left + (i / LANES) * half * 2 - lineW / 2, y, lineW, h);
     }
   }
 
   // 양쪽 경계 스트립 (럼블)
   const RP = P * 0.55;
-  for (let s = Math.floor(sBot / RP) * RP, k = 0; s < sTop; s += RP, k++) {
-    const y1 = yOf(s, zoom), y2 = yOf(s + RP, zoom);
-    const c1 = W / 2 + curveX(s), c2 = W / 2 + curveX(s + RP);
-    const col = (Math.floor(s / RP) % 2 === 0) ? pal.rumble1 : pal.rumble2;
-    const w = lineW * 1.5;
-    quad(c1 - half - w, y1, c1 - half + w, y1, c2 - half + w, y2, c2 - half - w, y2, col);
-    quad(c1 + half - w, y1, c1 + half + w, y1, c2 + half + w, y2, c2 + half - w, y2, col);
+  const w = lineW * 1.6;
+  for (let s = Math.floor(sBot / RP) * RP; s < sTop; s += RP) {
+    ctx.fillStyle = (Math.floor(s / RP) % 2 === 0) ? pal.rumble1 : pal.rumble2;
+    const y = yOf(s + RP, zoom);
+    const h = RP * zoom + 1;
+    ctx.fillRect(left - w, y, w * 2, h);
+    ctx.fillRect(right - w, y, w * 2, h);
+  }
+}
+
+// 고속에서 노면 위로 흐르는 속도선
+function renderRoadStreaks(zoom, pct) {
+  if (pct < 0.2) return;
+  const half = roadPxBase * zoom / 2;
+  ctx.fillStyle = `rgba(255,255,255,${(pct - 0.2) * 0.16})`;
+  const n = 26;
+  const len = 40 + pct * 170;
+  for (let i = 0; i < n; i++) {
+    const seed = (i * 9301 + 49297) % 233280 / 233280;
+    const x = W / 2 - half + seed * half * 2;
+    const y = ((State.scroll * 1.15 + i * 337) % (H + len + 200)) - len - 100;
+    ctx.fillRect(x, y, 2, len);
   }
 }
 
@@ -471,49 +474,37 @@ function renderObjects(zoom, blurPx) {
     const sp = sprites[o.kind % sprites.length];
     const w = sp.worldW * unit * zoom * o.scale;
     const h = w * (sp.cv.height / sp.cv.width);
-    const x = W / 2 + curveX(o.s) + o.side * (half + o.out * W) - w / 2;
-    // 속도에 따른 잔상
-    if (blurPx > 6) {
-      ctx.globalAlpha = 0.18;
-      ctx.drawImage(sp.cv, x, y - h / 2 - blurPx * 0.5, w, h);
-      ctx.globalAlpha = 0.09;
-      ctx.drawImage(sp.cv, x, y - h / 2 - blurPx, w, h);
+    const x = W / 2 + o.side * (half + o.out * W) - w / 2;
+    if (blurPx > 10) {
+      ctx.globalAlpha = 0.14;
+      ctx.drawImage(sp.cv, x, y - h / 2 - blurPx * 0.4, w, h);
       ctx.globalAlpha = 1;
     }
     ctx.drawImage(sp.cv, x, y - h / 2, w, h);
   }
 }
 
-function drawCar(sprite, type, offX, rel, zoom, extraRot, ghost) {
+function drawCar(sprite, type, offX, rel, zoom, rot) {
   const half = roadPxBase * zoom / 2;
-  const s = State.scroll + rel;
   const y = playerY - rel * zoom;
-  const x = W / 2 + curveX(s) + offX * half;
+  const x = W / 2 + offX * half;
   const w = carW(type) * zoom;
   const h = carL(type) * zoom;
-  const rot = Math.atan2(curveSlope(s), 1) + extraRot;
 
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(rot);
-  if (ghost > 2) {
-    ctx.globalAlpha = 0.22;
-    ctx.drawImage(sprite, -w / 2, -h / 2 - ghost * 0.6, w, h);
-    ctx.globalAlpha = 1;
-  }
+  if (rot) ctx.rotate(rot);
   ctx.drawImage(sprite, -w / 2, -h / 2, w, h);
   ctx.restore();
   return { x, y, w, h };
 }
 
-function renderCars(zoom, dt) {
-  const relK = H * CFG.relK;
+function renderCars(zoom) {
   for (const car of State.cars) {
     const y = playerY - car.rel * zoom;
     if (y < -220 || y > H + 220) continue;
-    const drift = (car.speed - State.speed) * relK * zoom;   // 화면상 상대 이동(px/s)
-    const rot = (car.changeTimer > 0 ? (car.targetLane < car.lane ? -0.12 : 0.12) : 0);
-    const p = drawCar(car.sprite, car.type, car.offX, car.rel, zoom, rot, Math.abs(drift) * 0.05);
+    const rot = car.changeTimer > 0 ? (car.targetLane < car.lane ? -0.12 : 0.12) : 0;
+    const p = drawCar(car.sprite, car.type, car.offX, car.rel, zoom, rot);
 
     // 차선 변경 깜빡이
     if (car.blink > 0 && Math.floor(car.blink * 8) % 2 === 0) {
@@ -530,7 +521,7 @@ function renderPlayer(zoom) {
   const steer = (laneCenter(State.targetLane) - State.offsetX) / laneWidthFrac;
   // 내 차 위치 표시 (탑다운에서 아군 식별)
   const half = roadPxBase * zoom / 2;
-  const mx = W / 2 + curveX(State.scroll) + State.offsetX * half;
+  const mx = W / 2 + State.offsetX * half;
   const mr = carW(State.car) * zoom * 1.5;
   const mg = ctx.createRadialGradient(mx, playerY, mr * 0.35, mx, playerY, mr);
   mg.addColorStop(0, "rgba(94,242,255,0.42)");
@@ -539,10 +530,9 @@ function renderPlayer(zoom) {
   ctx.beginPath();
   ctx.arc(mx, playerY, mr, 0, Math.PI * 2);
   ctx.fill();
-  const rot = -steer * 0.16 + (State.mode === "crashed" ? Math.sin(State.crashTimer * 9) * 0.25 : 0);
-  const p = drawCar(State.car.sprite, State.car, State.offsetX, 0, zoom, rot, 0);
 
-  // 진행 방향 표시(속도 잔상)
+  const rot = -steer * 0.16 + (State.mode === "crashed" ? Math.sin(State.crashTimer * 9) * 0.25 : 0);
+  const p = drawCar(State.car.sprite, State.car, State.offsetX, 0, zoom, rot);
   ctx.fillStyle = `rgba(255,255,255,${0.05 + speedPct() * 0.10})`;
   ctx.fillRect(p.x - p.w * 0.42, p.y + p.h * 0.5, p.w * 0.84, 2);
 }
@@ -561,23 +551,23 @@ function renderParticles(dt, pct) {
   const n = Math.min(particles.length, conf.n);
   for (let i = 0; i < n; i++) {
     const p = particles[i];
-    p.y += (0.5 + pct * 2.4) * p.s * dt;
+    p.y += (0.35 + pct * pct * 4.5) * p.s * dt;
     if (p.y > 1.05) { p.y = -0.05; p.x = Math.random(); }
-    const len = p.r * (2 + pct * 26);
-    ctx.fillRect(p.x * W, p.y * H, p.r, len);
+    ctx.fillRect(p.x * W, p.y * H, p.r, p.r * (2 + pct * pct * 26));
   }
 }
 
 function renderSpeedLines(pct) {
-  if (pct < 0.25) return;
-  const a = (pct - 0.25) * 0.42;
+  if (pct < 0.18) return;
+  const a = (pct - 0.18) * 0.55;
   ctx.fillStyle = `rgba(255,255,255,${a})`;
-  const n = 16;
+  const n = 18;
   for (let i = 0; i < n; i++) {
-    const t = (i / n) * 997 % 1;
-    const edge = i % 2 === 0 ? t * W * 0.16 : W - t * W * 0.16;
-    const y = ((State.scroll * (1.6 + t) + i * 320) % (H + 400)) - 200;
-    ctx.fillRect(edge, y, 2, 60 + pct * 220);
+    const t = ((i * 37) % 100) / 100;
+    const x = i % 2 === 0 ? t * W * 0.14 : W - t * W * 0.14;
+    const len = 60 + pct * pct * 190;
+    const y = ((State.scroll * 1.5 + i * 311) % (H + len + 200)) - len - 100;
+    ctx.fillRect(x, y, 2.5, len);
   }
 }
 
@@ -587,23 +577,24 @@ function render(dt) {
     : BIOMES[State.biomeA];
   const zoom = zoomOf();
   const pct = speedPct();
-  const scrollPx = State.speed * H * CFG.scrollK * zoom;   // 초당 화면 이동 px
+  const scrollPx = scrollRate(State.speed) * zoom;   // 초당 화면 이동 px
 
   ctx.save();
   if (State.shake > 0.001) {
-    const s = State.shake * 12;
+    const s = State.shake * 16;
     ctx.translate((Math.random() - 0.5) * s, (Math.random() - 0.5) * s);
   }
 
   renderGroundAndRoad(pal, zoom);
   renderRoadLines(pal, zoom);
+  renderRoadStreaks(zoom, pct);
 
   const sBot = State.scroll + (playerY - (H + 40)) / zoom;
   const sTop = State.scroll + (playerY + 40) / zoom;
   updateObjects(sTop, sBot);
-  renderObjects(zoom, scrollPx * 0.06);
+  renderObjects(zoom, scrollPx * 0.05);
 
-  renderCars(zoom, dt);
+  renderCars(zoom);
   renderPlayer(zoom);
 
   renderSpeedLines(pct);
@@ -614,9 +605,9 @@ function render(dt) {
   ctx.fillRect(0, 0, W, H);
 
   // 비네트 (속도가 높을수록 시야가 좁아진다)
-  const vg = ctx.createRadialGradient(W / 2, playerY, H * (0.5 - pct * 0.2), W / 2, playerY, H * 0.95);
+  const vg = ctx.createRadialGradient(W / 2, playerY, H * (0.52 - pct * 0.3), W / 2, playerY, H * 0.95);
   vg.addColorStop(0, "rgba(0,0,0,0)");
-  vg.addColorStop(1, `rgba(0,0,0,${0.32 + pct * 0.34})`);
+  vg.addColorStop(1, `rgba(0,0,0,${0.3 + pct * 0.45})`);
   ctx.fillStyle = vg;
   ctx.fillRect(0, 0, W, H);
 
@@ -647,8 +638,7 @@ function renderRadar() {
     rctx.strokeStyle = "rgba(255,255,255,0.10)";
     rctx.strokeRect(i * lw, 0, lw, RH);
   }
-  const pyRatio = BEHIND / (AHEAD + BEHIND);
-  const py = RH * (1 - pyRatio);
+  const py = RH * (1 - BEHIND / (AHEAD + BEHIND));
   rctx.strokeStyle = "rgba(255,255,255,0.25)";
   rctx.beginPath();
   rctx.moveTo(0, py);
@@ -663,94 +653,209 @@ function renderRadar() {
     const h = Math.max(3, carL(car.type) / 260 * 8);
     rctx.fillRect(cx - lw * 0.28, y - h / 2, lw * 0.56, h);
   }
-  const px = ((State.offsetX + 1) / 2) * RW;
   rctx.fillStyle = "#5ef2ff";
-  rctx.fillRect(px - lw * 0.3, py - 4, lw * 0.6, 8);
+  rctx.fillRect(((State.offsetX + 1) / 2) * RW - lw * 0.3, py - 4, lw * 0.6, 8);
 }
 
 // ---------------------------- 사운드 --------------------------------
+// 엔진(기어/RPM) + 노면 럼블 + 바람 + 추월 휘익 소리
+const GEAR_TOPS = [95, 145, 205, 275, 355, 480];
+
 const Sound = {
-  ctx: null, on: true, osc: null, gain: null, noiseGain: null, sub: null,
+  ctx: null, on: true, ready: false,
+  gear: 0, rpm: 0, shift: 0, lastWhoosh: 0,
+
   init() {
     if (this.ctx) return;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
-    this.ctx = new AC();
-    const master = this.ctx.createGain();
-    master.gain.value = 0.0;
-    master.connect(this.ctx.destination);
+    const ac = new AC();
+    this.ctx = ac;
+
+    const master = ac.createGain();
+    master.gain.value = 0;
+    const comp = ac.createDynamicsCompressor();
+    comp.threshold.value = -12;
+    comp.ratio.value = 6;
+    master.connect(comp).connect(ac.destination);
     this.master = master;
 
-    this.osc = this.ctx.createOscillator();
-    this.osc.type = "sawtooth";
-    this.osc.frequency.value = 70;
-    const filt = this.ctx.createBiquadFilter();
-    filt.type = "lowpass";
-    filt.frequency.value = 700;
-    this.gain = this.ctx.createGain();
-    this.gain.gain.value = 0.16;
-    this.osc.connect(filt).connect(this.gain).connect(master);
-    this.osc.start();
+    // --- 엔진: 톱니 2개(디튠) + 사각 서브 -> 로우패스
+    const eg = ac.createGain();
+    eg.gain.value = 0.0;
+    const lp = ac.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = 600;
+    lp.Q.value = 6;
+    lp.connect(eg).connect(master);
+    this.engineGain = eg;
+    this.engineLp = lp;
 
-    this.sub = this.ctx.createOscillator();
-    this.sub.type = "square";
-    this.sub.frequency.value = 35;
-    const sg = this.ctx.createGain();
-    sg.gain.value = 0.07;
-    this.sub.connect(sg).connect(master);
-    this.sub.start();
+    this.osc = [];
+    [["sawtooth", 0.5, 1], ["sawtooth", 0.34, 1.008], ["square", 0.30, 0.5]].forEach(([type, gain, mul]) => {
+      const o = ac.createOscillator();
+      o.type = type;
+      o.frequency.value = 60 * mul;
+      const g = ac.createGain();
+      g.gain.value = gain;
+      o.connect(g).connect(lp);
+      o.start();
+      this.osc.push({ o, mul });
+    });
 
-    // 바람 소리(노이즈)
-    const len = this.ctx.sampleRate * 2;
-    const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
+    // --- 노이즈 소스 (노면 럼블 / 바람 공용)
+    const len = ac.sampleRate * 2;
+    const buf = ac.createBuffer(1, len, ac.sampleRate);
     const d = buf.getChannelData(0);
     for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf;
-    src.loop = true;
-    const nf = this.ctx.createBiquadFilter();
-    nf.type = "bandpass";
-    nf.frequency.value = 900;
-    this.noiseGain = this.ctx.createGain();
-    this.noiseGain.gain.value = 0.0;
-    src.connect(nf).connect(this.noiseGain).connect(master);
-    src.start();
+    this.noiseBuf = buf;
+
+    const mkNoise = (filterType, freq, q) => {
+      const src = ac.createBufferSource();
+      src.buffer = buf;
+      src.loop = true;
+      const f = ac.createBiquadFilter();
+      f.type = filterType;
+      f.frequency.value = freq;
+      f.Q.value = q;
+      const g = ac.createGain();
+      g.gain.value = 0;
+      src.connect(f).connect(g).connect(master);
+      src.start();
+      return { f, g };
+    };
+    this.road = mkNoise("lowpass", 140, 1);     // 노면 럼블
+    this.wind = mkNoise("bandpass", 700, 0.7);  // 바람
+    this.hiss = mkNoise("highpass", 3000, 0.7); // 고속 쉬익
+    this.ready = true;
   },
+
   start() {
     this.init();
     if (!this.ctx) return;
     if (this.ctx.state === "suspended") this.ctx.resume();
-    this.master.gain.setTargetAtTime(this.on ? 0.5 : 0, this.ctx.currentTime, 0.2);
+    this.gear = 0; this.shift = 0;
+    this.master.gain.setTargetAtTime(this.on ? 0.55 : 0, this.ctx.currentTime, 0.25);
   },
+
   stop() {
     if (!this.ctx) return;
     this.master.gain.setTargetAtTime(0, this.ctx.currentTime, 0.3);
   },
-  setSpeed(kmh) {
-    if (!this.ctx || !this.osc) return;
+
+  // 속도에 따라 기어를 올리며 RPM을 다시 떨어뜨린다 (변속감)
+  update(speed, pct, dt) {
+    if (!this.ready) return;
     const t = this.ctx.currentTime;
-    this.osc.frequency.setTargetAtTime(58 + kmh * 1.05, t, 0.08);
-    this.sub.frequency.setTargetAtTime(28 + kmh * 0.24, t, 0.1);
-    this.noiseGain.gain.setTargetAtTime(Math.min(0.14, (kmh - 90) / 900), t, 0.2);
+    let gear = 0;
+    while (gear < GEAR_TOPS.length - 1 && speed > GEAR_TOPS[gear]) gear++;
+    if (gear !== this.gear) { this.gear = gear; this.shift = 0.22; }
+    const lo = gear === 0 ? 55 : GEAR_TOPS[gear - 1];
+    const hi = GEAR_TOPS[gear];
+    this.rpm = Util.limit((speed - lo) / (hi - lo), 0, 1);
+    if (this.shift > 0) this.shift = Math.max(0, this.shift - dt);
+
+    const duck = this.shift > 0 ? 0.30 : 1;
+    const base = 46 + this.rpm * 132 + gear * 7;
+    for (const { o, mul } of this.osc) o.frequency.setTargetAtTime(base * mul, t, 0.05);
+    this.engineLp.frequency.setTargetAtTime(380 + this.rpm * 2400 + pct * 1600, t, 0.06);
+    this.engineGain.gain.setTargetAtTime((0.17 + pct * 0.13) * duck, t, this.shift > 0 ? 0.02 : 0.08);
+
+    // 노면 럼블: 속도에 비례
+    this.road.f.frequency.setTargetAtTime(110 + speed * 0.55, t, 0.15);
+    this.road.g.gain.setTargetAtTime(0.05 + pct * 0.22, t, 0.15);
+    // 바람: 고속에서 급격히 커진다 (속도 체감의 핵심)
+    this.wind.f.frequency.setTargetAtTime(520 + Math.pow(pct, 1.2) * 3400, t, 0.2);
+    this.wind.g.gain.setTargetAtTime(Math.pow(pct, 1.7) * 0.55, t, 0.2);
+    this.hiss.g.gain.setTargetAtTime(Math.pow(pct, 3) * 0.30, t, 0.2);
   },
-  crash() {
-    if (!this.ctx) return;
-    const t = this.ctx.currentTime;
-    const o = this.ctx.createOscillator();
-    o.type = "square";
-    o.frequency.setValueAtTime(160, t);
-    o.frequency.exponentialRampToValueAtTime(40, t + 0.5);
-    const g = this.ctx.createGain();
-    g.gain.setValueAtTime(0.5, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.7);
+
+  // 옆을 스쳐 지나갈 때 도플러풍 휘익
+  whoosh(pan, power) {
+    if (!this.ready || !this.on || this.ctx.currentTime - this.lastWhoosh < 0.07) return;
+    this.lastWhoosh = this.ctx.currentTime;
+    const ac = this.ctx, t = ac.currentTime, dur = 0.3;
+    const src = ac.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = ac.createBiquadFilter();
+    f.type = "bandpass";
+    f.Q.value = 1.4;
+    f.frequency.setValueAtTime(2400, t);
+    f.frequency.exponentialRampToValueAtTime(420, t + dur);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.exponentialRampToValueAtTime(0.34 * power, t + dur * 0.3);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    let node = g;
+    if (ac.createStereoPanner) {
+      const pn = ac.createStereoPanner();
+      pn.pan.value = Util.limit(pan, -1, 1);
+      g.connect(pn);
+      node = pn;
+    }
+    src.connect(f).connect(g);
+    node.connect(this.master);
+    src.start(t);
+    src.stop(t + dur + 0.05);
+  },
+
+  // 아슬아슬 통과 콤보 알림
+  blip(combo) {
+    if (!this.ready || !this.on) return;
+    const ac = this.ctx, t = ac.currentTime;
+    const o = ac.createOscillator();
+    o.type = "triangle";
+    o.frequency.setValueAtTime(760 + combo * 90, t);
+    o.frequency.exponentialRampToValueAtTime(1180 + combo * 110, t + 0.09);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.16, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.16);
     o.connect(g).connect(this.master);
     o.start(t);
-    o.stop(t + 0.75);
-    this.master.gain.setTargetAtTime(this.on ? 0.35 : 0, t, 0.1);
+    o.stop(t + 0.18);
   },
+
+  crash() {
+    if (!this.ready) return;
+    const ac = this.ctx, t = ac.currentTime;
+    // 금속 충격 + 파열음
+    const src = ac.createBufferSource();
+    src.buffer = this.noiseBuf;
+    const f = ac.createBiquadFilter();
+    f.type = "lowpass";
+    f.frequency.setValueAtTime(4200, t);
+    f.frequency.exponentialRampToValueAtTime(180, t + 0.8);
+    const g = ac.createGain();
+    g.gain.setValueAtTime(0.75, t);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + 0.9);
+    src.connect(f).connect(g).connect(this.master);
+    src.start(t);
+    src.stop(t + 0.95);
+
+    const o = ac.createOscillator();
+    o.type = "square";
+    o.frequency.setValueAtTime(180, t);
+    o.frequency.exponentialRampToValueAtTime(34, t + 0.55);
+    const og = ac.createGain();
+    og.gain.setValueAtTime(0.4, t);
+    og.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+    o.connect(og).connect(this.master);
+    o.start(t);
+    o.stop(t + 0.75);
+
+    // 엔진/바람은 급격히 죽인다
+    this.engineGain.gain.setTargetAtTime(0, t, 0.15);
+    this.wind.g.gain.setTargetAtTime(0, t, 0.2);
+    this.hiss.g.gain.setTargetAtTime(0, t, 0.2);
+    this.road.g.gain.setTargetAtTime(0, t, 0.2);
+  },
+
   toggle() {
     this.on = !this.on;
-    if (this.ctx) this.master.gain.setTargetAtTime(this.on && State.mode === "playing" ? 0.5 : 0, this.ctx.currentTime, 0.1);
+    if (this.ctx) {
+      this.master.gain.setTargetAtTime(
+        this.on && State.mode === "playing" ? 0.55 : 0, this.ctx.currentTime, 0.1);
+    }
     return this.on;
   },
 };
@@ -792,13 +897,14 @@ function buildMenu() {
     type.sprite = getCarSprite(type, type.colors.body);
     const el = document.createElement("button");
     el.className = "car-card" + (type === State.car ? " selected" : "");
+    const accel = type.accel * CFG.baseAccel;
     el.innerHTML = `
       <div class="car-thumb"></div>
       <div class="car-name">${type.name}<span class="tag">${type.tag}</span></div>
       <div class="car-desc">${type.desc}</div>
       <dl class="car-stats">
         ${statRow("시작", type.startSpeed + " km/h", (type.startSpeed - 80) / 50)}
-        ${statRow("가속", type.accel.toFixed(2) + " km/h·s", type.accel / 2)}
+        ${statRow("가속", "+" + accel.toFixed(1) + " km/h·s", accel / 8)}
         ${statRow("조향", type.handling.toFixed(1), type.handling / 4)}
         ${statRow("차폭", type.width + "", 1 - (type.width - 130) / 300)}
         ${statRow("배율", "x" + type.scoreMul.toFixed(2), (type.scoreMul - 1) / 1.1)}
@@ -974,8 +1080,8 @@ function frame(now) {
       if (State.mode !== "playing") break;
     }
     applyCarFollowing(dt);
-    Sound.setSpeed(State.speed);
-    State.shake = Util.limit((State.speed - 220) / 500, 0, 1);
+    Sound.update(State.speed, speedPct(), dt);
+    State.shake = Util.limit((State.speed - 190) / 320, 0, 1) * 0.8;
   } else if (State.mode === "crashed") {
     State.crashTimer += dt;
     State.shake = Math.max(0, State.shake - dt * 1.2);
