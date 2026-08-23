@@ -160,7 +160,7 @@ function emptiestLane(ignore) {
 
 function spawnCar(recycled, scatter) {
   const type = TRAFFIC_TYPES[Util.randInt(0, TRAFFIC_TYPES.length - 1)];
-  const color = TRAFFIC_COLORS[Util.randInt(0, TRAFFIC_COLORS.length - 1)];
+  const color = type.color || TRAFFIC_COLORS[Util.randInt(0, TRAFFIC_COLORS.length - 1)];
   const lane = emptiestLane(recycled);
   const speed = LANE_SPEEDS[lane] * Util.rand(0.95, 1.06);
   const ahead = speed < State.speed;   // 나보다 느리면 앞쪽에서 다가온다
