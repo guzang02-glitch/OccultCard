@@ -21,15 +21,15 @@ const CFG = {
   relK: 0.0014,           // × 화면높이 : 트래픽 상대 이동(회피 난이도)
 
   baseAccel: 4.0,         // 초당 가속(km/h) × 차량 accel 배율
-  visRef: 480,            // 시각/청각 효과가 최대에 도달하는 기준 속도 (속도 자체는 무제한)
-  zoomMin: 0.66,          // 고속일수록 축소해서 앞을 더 보여준다
+  visRef: 800,            // 시각/청각 효과가 최대에 도달하는 기준 속도 (속도 자체는 무제한)
+  zoomMin: 0.58,          // 고속일수록 축소해서 앞을 더 보여준다
 
   // 충돌 판정은 넉넉하게 (실제 그림보다 작은 히트박스)
   hitX: 0.60,
   hitY: 0.66,
 
-  trafficMin: 24,
-  trafficMax: 44,
+  trafficMin: 36,
+  trafficMax: 66,
   laneChangeProb: 0.055,
   laneChangeProbMax: 0.16,
   laneChangeTime: 0.85,
@@ -112,9 +112,10 @@ function speedPct() {
   return Util.limit((State.speed - 80) / (CFG.visRef - 80), 0, 1);
 }
 // 속도에 따른 축소율 (빠를수록 멀리 본다 = 고속에서도 피할 수 있다)
-// 최고 속도가 없으므로 기준 속도를 넘어서도 아주 조금씩 계속 축소된다
+// 초반부터 시야를 확보하도록 제곱근 곡선을 쓰고, 기준 속도(800)에서 최소가 된다.
+// 최고 속도가 없으므로 그 이후로도 아주 조금씩 계속 축소된다
 function zoomOf() {
-  const z = 1 - (1 - CFG.zoomMin) * Math.pow(speedPct(), 0.85);
+  const z = 1 - (1 - CFG.zoomMin) * Math.sqrt(speedPct());
   if (State.speed <= CFG.visRef) return z;
   return z * Math.max(0.72, Math.pow(CFG.visRef / State.speed, 0.3));
 }
@@ -145,14 +146,26 @@ function laneOccupied(lane, rel, gap, ignore) {
   return false;
 }
 
+// 차량이 가장 적은 차선을 고른다 (동수면 그중 무작위) - 차선별 밀도를 고르게 유지
+function emptiestLane(ignore) {
+  const counts = new Array(LANES).fill(0);
+  for (const c of State.cars) {
+    if (c === ignore) continue;
+    counts[c.changeTimer > 0 ? c.targetLane : c.lane]++;
+  }
+  let min = Infinity;
+  const best = [];
+  for (let i = 0; i < LANES; i++) {
+    if (counts[i] < min) { min = counts[i]; best.length = 0; best.push(i); }
+    else if (counts[i] === min) best.push(i);
+  }
+  return best[Util.randInt(0, best.length - 1)];
+}
+
 function spawnCar(recycled, scatter) {
   const type = TRAFFIC_TYPES[Util.randInt(0, TRAFFIC_TYPES.length - 1)];
   const color = TRAFFIC_COLORS[Util.randInt(0, TRAFFIC_COLORS.length - 1)];
-  let lane = 0;
-  for (let tries = 0; tries < 8; tries++) {
-    lane = Util.randInt(0, LANES - 1);
-    if (Math.random() < 0.55 + (lane / LANES) * 0.3) break;
-  }
+  const lane = emptiestLane(recycled);
   const speed = LANE_SPEEDS[lane] * Util.rand(0.95, 1.06);
   const ahead = speed < State.speed;   // 나보다 느리면 앞쪽에서 다가온다
   const len = carL(type);
