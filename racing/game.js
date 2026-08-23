@@ -28,13 +28,12 @@ const CFG = {
   hitX: 0.60,
   hitY: 0.66,
 
-  trafficMin: 36,
-  trafficMax: 66,
-  laneChangeProb: 0.055,
-  laneChangeProbMax: 0.16,
-  laneChangeTime: 0.85,
+  // 관리 범위가 넓어진 만큼 대수도 함께 늘려 화면상 밀도를 유지한다
+  trafficMin: 45,
+  trafficMax: 83,
+  spawnMargin: 140,       // 화면 밖 이만큼(px) 더 나간 곳에서 생성한다
 
-  aheadWin: 2.3,          // × 화면높이 : 트래픽 관리 범위(앞)
+  aheadWin: 3.2,          // × 화면높이 : 트래픽 관리 범위(앞)
   behindWin: 1.2,         // × 화면높이 : 트래픽 관리 범위(뒤)
 
   bandLen: 110,           // 지면 교차 밴드 길이
@@ -60,7 +59,7 @@ const laneCenter = (lane) => -1 + (lane + 0.5) * laneWidthFrac;
 // ---------------------------- 상태 ----------------------------------
 const State = {
   mode: "menu", // menu | playing | crashed
-  car: CAR_TYPES[1],
+  car: CAR_TYPES[0],
   scroll: 0,          // 누적 주행 위치(기준 px) - 도로/지면/오브젝트 공통 좌표
   speed: 100,
   topSpeed: 100,
@@ -140,7 +139,7 @@ function trafficCount() {
 function laneOccupied(lane, rel, gap, ignore) {
   for (const c of State.cars) {
     if (c === ignore) continue;
-    if (c.lane !== lane && c.targetLane !== lane) continue;
+    if (c.lane !== lane) continue;
     if (Math.abs(c.rel - rel) < gap) return true;
   }
   return false;
@@ -151,7 +150,7 @@ function emptiestLane(ignore) {
   const counts = new Array(LANES).fill(0);
   for (const c of State.cars) {
     if (c === ignore) continue;
-    counts[c.changeTimer > 0 ? c.targetLane : c.lane]++;
+    counts[c.lane]++;
   }
   let min = Infinity;
   const best = [];
@@ -169,25 +168,25 @@ function spawnCar(recycled, scatter) {
   const speed = LANE_SPEEDS[lane] * Util.rand(0.95, 1.06);
   const ahead = speed < State.speed;   // 나보다 느리면 앞쪽에서 다가온다
   const len = carL(type);
+  // 화면 위/아래 경계 바깥 (현재 축소율 기준) - 눈앞에서 갑자기 나타나지 않게
+  const zoom = zoomOf();
+  const offTop = (playerY + CFG.spawnMargin) / zoom;
+  const offBottom = (H - playerY + CFG.spawnMargin) / zoom;
   let rel = 0;
   for (let tries = 0; tries < 14; tries++) {
     rel = scatter
       ? Util.rand(-BEHIND * 0.92, AHEAD * 0.92)
-      : (ahead ? Util.rand(H * 0.95, AHEAD) : -Util.rand(H * 0.45, BEHIND));
+      : (ahead ? Util.rand(offTop, AHEAD) : -Util.rand(offBottom, BEHIND));
     if (!laneOccupied(lane, rel, len * 1.6 + 90, recycled)) break;
   }
   const car = recycled || {};
   car.type = type;
   car.sprite = getCarSprite(type, color);
   car.lane = lane;
-  car.targetLane = lane;
   car.offX = laneCenter(lane);
   car.rel = rel;
   car.speed = speed;
   car.baseSpeed = speed;
-  car.blocked = false;
-  car.changeTimer = 0;
-  car.blink = 0;
   car.prevRel = rel;
   car.scored = false;
   return car;
@@ -202,42 +201,12 @@ function resetTraffic() {
   }
 }
 
-function tryLaneChange(car) {
-  const dir = Math.random() < 0.5 ? -1 : 1;
-  const target = car.lane + dir;
-  if (target < 0 || target >= LANES) return;
-  if (laneOccupied(target, car.rel, carL(car.type) * 2.0 + 110, car)) return;
-  car.targetLane = target;
-  car.changeTimer = CFG.laneChangeTime;
-  car.blink = CFG.laneChangeTime;
-  // 차선을 옮기면 그 차선의 흐름 속도에 맞춰 간다
-  car.baseSpeed = LANE_SPEEDS[target] * Util.rand(0.95, 1.06);
-  car.speed = car.baseSpeed;
-}
-
 function updateTraffic(dt) {
   const relK = H * CFG.relK;
-  const laneProb = Util.limit(CFG.laneChangeProb + State.elapsed * 0.0008, 0, CFG.laneChangeProbMax);
   while (State.cars.length < trafficCount()) State.cars.push(spawnCar(null));
 
   for (const car of State.cars) {
     car.rel += (car.speed - State.speed) * relK * dt;
-
-    if (car.changeTimer > 0) {
-      car.changeTimer = Math.max(0, car.changeTimer - dt);
-      const target = laneCenter(car.targetLane);
-      const step = (laneWidthFrac / CFG.laneChangeTime) * dt;
-      if (Math.abs(target - car.offX) <= step) {
-        car.offX = target;
-        car.lane = car.targetLane;
-        car.changeTimer = 0;
-      } else {
-        car.offX += Math.sign(target - car.offX) * step;
-      }
-    } else if (Math.random() < laneProb * (car.blocked ? 3 : 1) * dt) {
-      tryLaneChange(car);
-    }
-    if (car.blink > 0) car.blink = Math.max(0, car.blink - dt);
 
     // 관리 범위를 벗어난 차량 재활용
     if (car.rel > AHEAD * 1.15 || car.rel < -BEHIND * 1.15) {
@@ -270,27 +239,17 @@ function updateTraffic(dt) {
 // 같은 차선에서 앞차를 따라잡으면 속도를 맞추고, 겹치면 밀어낸다
 function applyCarFollowing(dt) {
   for (const car of State.cars) {
-    const lane = car.changeTimer > 0 ? car.targetLane : car.lane;
     let lead = null, bestGap = Infinity;
     for (const o of State.cars) {
-      if (o === car) continue;
-      const oLane = o.changeTimer > 0 ? o.targetLane : o.lane;
-      if (oLane !== lane) continue;
+      if (o === car || o.lane !== car.lane) continue;
       const gap = o.rel - car.rel;
       if (gap > 0 && gap < bestGap) { bestGap = gap; lead = o; }
     }
-    if (!lead) {
-      car.blocked = false;
-      car.speed += (car.baseSpeed - car.speed) * Math.min(1, dt * 2);
-      continue;
-    }
-    const minGap = (carL(car.type) + carL(lead.type)) / 2 * 1.25 + 80;
-    if (bestGap < minGap * 1.7) {
-      car.blocked = true;
+    const minGap = lead ? (carL(car.type) + carL(lead.type)) / 2 * 1.25 + 80 : 0;
+    if (lead && bestGap < minGap * 1.7) {
       car.speed = Math.min(car.baseSpeed, lead.speed * 0.99);
       if (bestGap < minGap) car.rel = lead.rel - minGap;   // 겹침 방지
     } else {
-      car.blocked = false;
       car.speed += (car.baseSpeed - car.speed) * Math.min(1, dt * 2);
     }
   }
@@ -515,17 +474,7 @@ function renderCars(zoom) {
   for (const car of State.cars) {
     const y = playerY - car.rel * zoom;
     if (y < -220 || y > H + 220) continue;
-    const rot = car.changeTimer > 0 ? (car.targetLane < car.lane ? -0.12 : 0.12) : 0;
-    const p = drawCar(car.sprite, car.type, car.offX, car.rel, zoom, rot);
-
-    // 차선 변경 깜빡이
-    if (car.blink > 0 && Math.floor(car.blink * 8) % 2 === 0) {
-      const dir = car.targetLane < car.lane ? -1 : 1;
-      ctx.fillStyle = "#ffc400";
-      ctx.beginPath();
-      ctx.arc(p.x + dir * p.w * 0.6, p.y - p.h * 0.3, Math.max(2, p.w * 0.13), 0, Math.PI * 2);
-      ctx.fill();
-    }
+    drawCar(car.sprite, car.type, car.offX, car.rel, zoom, 0);
   }
 }
 

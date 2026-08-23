@@ -88,7 +88,7 @@ h2 { font-size: 13px; letter-spacing: .16em; color: #7d90b0; margin: 0 0 10px; t
 .cols { display: grid; grid-template-columns: 1.55fr 1fr; gap: 22px; }
 @media (max-width: 760px) { .cols { grid-template-columns: 1fr; } }
 
-#car-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 10px;
+#car-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(168px, 1fr)); gap: 10px;
   max-height: 44dvh; overflow-y: auto; padding-right: 4px; }
 .car-card {
   text-align: left; background: rgba(255,255,255,.035); border: 1px solid rgba(255,255,255,.10);
