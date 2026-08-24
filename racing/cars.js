@@ -47,7 +47,7 @@ function shade(hex, amount) {
 // ---------------------------------------------------------------------
 const PLAYER_CAR = {
   id: "jet", name: "제트 R", tag: "오토바이", kind: "bike",
-  desc: "폭이 절반, 조향은 가장 빠르다. 브레이크만 빠졌다.",
+  desc: "폭이 절반, 조향은 가장 빠르다. 250km/h 까지는 가속이 2배.",
   startSpeed: 108, accel: 1.6, handling: 3.8,
   width: 148, topAspect: 2.6, scoreMul: 1.0,
   colors: { body: "#ff2f2f", glass: "#180f14" },

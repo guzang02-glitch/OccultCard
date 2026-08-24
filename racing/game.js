@@ -21,6 +21,8 @@ const CFG = {
   relK: 0.0014,           // × 화면높이 : 트래픽 상대 이동(회피 난이도)
 
   baseAccel: 4.0,         // 초당 가속(km/h) × 차량 accel 배율
+  boostUntil: 250,        // 이 속도까지는 가속이 2배 (초반이 늘어지지 않게)
+  boostMul: 2,
   visRef: 800,            // 시각/청각 효과가 최대에 도달하는 기준 속도 (속도 자체는 무제한)
   zoomMin: 0.58,          // 고속일수록 축소해서 앞을 더 보여준다
 
@@ -112,6 +114,14 @@ function resize() {
   BEHIND = H * CFG.behindWin;
 }
 window.addEventListener("resize", resize);
+
+// 경과 시간 -> 속도. 250km/h 까지는 2배로 가속하고, 그 뒤로는 원래 속도로 붙는다
+function speedAt(t) {
+  const a = State.car.accel * CFG.baseAccel;
+  const boostA = a * CFG.boostMul;
+  const tb = Math.max(0, (CFG.boostUntil - State.car.startSpeed) / boostA);
+  return t <= tb ? State.car.startSpeed + boostA * t : CFG.boostUntil + a * (t - tb);
+}
 
 function speedPct() {
   return Util.limit((State.speed - 80) / (CFG.visRef - 80), 0, 1);
@@ -358,7 +368,7 @@ function step(dt) {
   State.elapsed += dt;
 
   // 브레이크 고장: 속도는 오직 올라가기만 한다 (상한 없음)
-  State.speed = State.car.startSpeed + State.car.accel * CFG.baseAccel * State.elapsed;
+  State.speed = speedAt(State.elapsed);
   State.topSpeed = Math.max(State.topSpeed, State.speed);
 
   State.scroll += scrollRate(State.speed) * dt;
@@ -978,6 +988,7 @@ function buildMenu() {
   const type = State.car;
   type.sprite = getCarSprite(type, type.colors.body);
   const accel = type.accel * CFG.baseAccel;
+  const boost = accel * CFG.boostMul;
   const card = document.getElementById("car-info");
   card.innerHTML = `
     <div class="car-thumb"></div>
@@ -986,7 +997,7 @@ function buildMenu() {
       <div class="car-desc">${type.desc}</div>
       <dl class="car-stats">
         ${statRow("시작", type.startSpeed + " km/h", (type.startSpeed - 80) / 50)}
-        ${statRow("가속", "+" + accel.toFixed(1) + " km/h·s", accel / 8)}
+        ${statRow("가속", "+" + boost.toFixed(1) + " → +" + accel.toFixed(1), boost / 14)}
         ${statRow("조향", type.handling.toFixed(1), type.handling / 4)}
         ${statRow("차폭", type.width + "", 1 - (type.width - 130) / 300)}
       </dl>
